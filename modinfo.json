@@ -1,0 +1,10 @@
+{
+  "type": "content",
+  "modid": "examplecontentmod",
+  "name": "VS Wiki Example Content Mod",
+  "authors": [
+    "Nat @ Vintage Story Wiki"
+  ],
+  "description": "An example showcase of content mod additions.",
+  "version": "1.0.0"
+}
