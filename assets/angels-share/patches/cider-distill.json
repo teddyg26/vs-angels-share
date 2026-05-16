@@ -1,0 +1,58 @@
+[
+  {
+    "file": "game:itemtypes/liquid/cider.json",
+    "op": "replace",
+    "path": "/attributes/distillationPropsbytype",
+    "value": {
+      "ciderportion-mead": {
+        "distilledStack": {
+          "type": "item",
+          "code": "angels-share:whitespiritportion-mead"
+        },
+        "ratio": 0.1
+      },
+      "ciderportion-spelt": {
+        "distilledStack": {
+          "type": "item",
+          "code": "angels-share:whitespiritportion-spelt"
+        },
+        "ratio": 0.1
+      },
+      "ciderportion-rice": {
+        "distilledStack": {
+          "type": "item",
+          "code": "angels-share:whitespiritportion-rice"
+        },
+        "ratio": 0.1
+      },
+      "ciderportion-rye": {
+        "distilledStack": {
+          "type": "item",
+          "code": "angels-share:whitespiritportion-rye"
+        },
+        "ratio": 0.1
+      },
+      "ciderportion-amaranth": {
+        "distilledStack": {
+          "type": "item",
+          "code": "angels-share:whitespiritportion-amaranth"
+        },
+        "ratio": 0.1
+      },
+      "ciderportion-cassava": {
+        "distilledStack": {
+          "type": "item",
+          "code": "angels-share:whitespiritportion-cassava"
+        },
+        "ratio": 0.1
+      },
+      "*": {
+        "distilledStack": {
+          "type": "item",
+          "code": "angels-share:whitespiritportion-{fruit}"
+        },
+        "ratio": 0.2
+      }
+    }
+  }
+]

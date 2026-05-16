@@ -1,0 +1,36 @@
+{
+  "code": "aging-eaudevie",
+  "sealHours": 336,
+  "ingredients": [
+    {
+      "type": "item",
+      "code": "angels-share:whitespiritportion-{variant}",
+      "litres": 2
+    }
+  ],
+  "variantGroups": [
+    {
+      "code": "variant",
+      "states": [
+        "apple",
+        "mead",
+        "cherry",
+        "pear",
+        "plum",
+        "peach",
+        "blackberry",
+        "raspberry",
+        "blueberry",
+        "cranberry",
+        "elderberry",
+        "blackcurrant",
+        "redcurrant"
+      ]
+    }
+  ],
+  "output": {
+    "type": "item",
+    "code": "game:spiritportion-{variant}",
+    "litres": 1
+  }
+}

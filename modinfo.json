@@ -1,10 +1,10 @@
 {
   "type": "content",
-  "modid": "examplecontentmod",
-  "name": "VS Wiki Example Content Mod",
+  "modid": "angels-share",
+  "name": "Angel's Share",
   "authors": [
-    "Nat @ Vintage Story Wiki"
+    "teddyg26"
   ],
-  "description": "An example showcase of content mod additions.",
-  "version": "1.0.0"
+  "description": "A mod that expands on distillation.",
+  "version": "0.2.0"
 }

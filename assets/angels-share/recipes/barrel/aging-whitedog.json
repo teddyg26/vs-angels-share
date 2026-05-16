@@ -1,0 +1,22 @@
+{
+  "code": "aging-whitedog",
+  "sealHours": 336,
+  "ingredients": [
+    {
+      "type": "item",
+      "code": "angels-share:whitespiritportion-{variant}",
+      "litres": 2
+    }
+  ],
+  "variantGroups": [
+    {
+      "code": "variant",
+      "states": [ "spelt", "rice", "rye", "amaranth", "cassava" ]
+    }
+  ],
+  "output": {
+    "type": "item",
+    "code": "game:spiritportion-{variant}",
+    "litres": 1
+  }
+}

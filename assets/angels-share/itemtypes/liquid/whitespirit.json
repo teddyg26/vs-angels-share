@@ -1,0 +1,96 @@
+{
+  "code": "whitespiritportion",
+  "variantGroups": [
+    {
+      "code": "fruit",
+      "loadFromProperties": "block/fruit",
+      "states": [ "apple", "mead", "spelt", "rice", "rye", "amaranth", "cassava" ]
+    }
+  ],
+  "skipVariants": [ "*-pinkapple", "*-redapple", "*-yellowapple", "*-olive" ],
+  "class": "ItemLiquidPortion",
+  "matterState": "liquid",
+  "attributes": {
+    "handbook": {
+      "ignoreCreativeInvStacks": true,
+      "groupBy": [ "whitespiritportion-*" ]
+    },
+    "waterTightContainerProps": {
+      "containable": true,
+      "itemsPerLitre": 100,
+      // FIX 1: Set alpha here to 100 so the GUI panel bar reads it cleanly without washing out
+      "texture": {
+        "base": "game:block/liquid/milkportion",
+        "alpha": 100
+      },
+      // FIX 2: Explicitly block climate/water color tinting algorithms from blacking it out inside containers
+      "climateColorMap": null,
+      "allowSpill": true,
+      "whenSpilled": {
+        "action": "DropContents",
+        "stack": {
+          "type": "item",
+          "code": "angels-share:whitespiritportion-{fruit}"
+        }
+      },
+      "nutritionPropsPerLitre": {
+        "satiety": 80,
+        "intoxication": 1.5,
+        "foodcategory": "NoNutrition"
+      }
+    }
+  },
+  "shape": { "base": "game:item/liquid" },
+  // Keep hand-held item render alpha faint/transparent (15) so buckets still look realistic in hand
+  "texture": {
+    "base": "game:block/liquid/milkportion",
+    "alpha": 15
+  },
+  "creativeinventoryStacks": [
+    {
+      "tabs": [ "general", "liquids" ],
+      "stacks": [
+        {
+          "type": "block",
+          "code": "game:woodbucket",
+          "attributes": {
+            "ucontents": [
+              {
+                "type": "item",
+                "code": "angels-share:whitespiritportion-{fruit}",
+                "makefull": true
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "maxstacksize": 5000,
+  "materialDensity": 200,
+  "guiTransform": {
+    "translation": {
+      "x": 0,
+      "y": 1,
+      "z": 0
+    },
+    "rotation": {
+      "x": 123,
+      "y": -33,
+      "z": -13
+    },
+    "origin": {
+      "x": 0.5,
+      "y": 0,
+      "z": 0.5
+    },
+    "scale": 1.4
+  },
+  "tpHandTransform": {
+    "translation": {
+      "x": -1.5,
+      "y": -1,
+      "z": -1.4
+    }
+  }
+}

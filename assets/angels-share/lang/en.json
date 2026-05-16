@@ -1,0 +1,19 @@
+{
+  /* 1. Base Liquid Portion Names (For Handbook & Internal Lookups) */
+  "item-liquid-whitespiritportion-spelt": "White Dog (Spelt)",
+  "item-liquid-whitespiritportion-rice": "White Dog (Rice)",
+  "item-liquid-whitespiritportion-rye": "White Dog (Rye)",
+  "item-liquid-whitespiritportion-amaranth": "White Dog (Amaranth)",
+  "item-liquid-whitespiritportion-cassava": "White Dog (Cassava)",
+  "item-liquid-whitespiritportion-mead": "Eau de Vie de Hydromel",
+  "item-liquid-whitespiritportion-*": "Eau de Vie ({fruit})",
+
+  /* 2. Container Fluid Overlay Descriptors (Crucial for 1.22 Tooltips) */
+  "incontainer-item-whitespiritportion-spelt": "White Dog (Spelt)",
+  "incontainer-item-whitespiritportion-rice": "White Dog (Rice)",
+  "incontainer-item-whitespiritportion-rye": "White Dog (Rye)",
+  "incontainer-item-whitespiritportion-amaranth": "White Dog (Amaranth)",
+  "incontainer-item-whitespiritportion-cassava": "White Dog (Cassava)",
+  "incontainer-item-whitespiritportion-mead": "Eau de Vie de Hydromel",
+  "incontainer-item-whitespiritportion-*": "Eau de Vie ({fruit})"
+}

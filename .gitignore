@@ -1,0 +1,9 @@
+# Ignore Visual Studio temporary configurations
+.vs/
+*.user
+*.suo
+*.sln.docstates
+
+# Ignore standard build artifacts if you compile code later
+bin/
+obj/
