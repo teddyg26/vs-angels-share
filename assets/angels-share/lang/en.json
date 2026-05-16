@@ -7,6 +7,8 @@
   "item-liquid-whitespiritportion-cassava": "White Dog (Cassava)",
   "item-liquid-whitespiritportion-mead": "Eau de Vie de Hydromel",
   "item-liquid-whitespiritportion-*": "Eau de Vie ({fruit})",
+  "item-liquid-ginportion-breadfruit": "Breadfruit Gin",
+  "item-liquid-ginportion-cassava": "Cassava Gin",
 
   /* 2. Container Fluid Overlay Descriptors (Crucial for 1.22 Tooltips) */
   "incontainer-item-whitespiritportion-spelt": "White Dog (Spelt)",
@@ -15,5 +17,7 @@
   "incontainer-item-whitespiritportion-amaranth": "White Dog (Amaranth)",
   "incontainer-item-whitespiritportion-cassava": "White Dog (Cassava)",
   "incontainer-item-whitespiritportion-mead": "Eau de Vie de Hydromel",
-  "incontainer-item-whitespiritportion-*": "Eau de Vie ({fruit})"
+  "incontainer-item-whitespiritportion-*": "Eau de Vie ({fruit})",
+  "incontainer-item-ginportion-breadfruit": "Breadfruit Gin",
+  "incontainer-item-ginportion-cassava": "Cassava Gin"
 }

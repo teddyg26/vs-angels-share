@@ -1,0 +1,44 @@
+[
+  {
+    "code": "infuse-gin-cassava",
+    "sealHours": 72,
+    "ingredients": [
+      {
+        "type": "item",
+        "code": "game:spiritportion-cassava",
+        "litres": 10
+      },
+      {
+        "type": "item",
+        "code": "game:spice-licorice-raw",
+        "quantity": 5
+      }
+    ],
+    "output": {
+      "type": "item",
+      "code": "angels-share:ginportion-cassava",
+      "litres": 10
+    }
+  },
+  {
+    "code": "infuse-gin-breadfruit",
+    "sealHours": 72,
+    "ingredients": [
+      {
+        "type": "item",
+        "code": "game:spiritportion-breadfruit",
+        "litres": 10
+      },
+      {
+        "type": "item",
+        "code": "game:spice-licorice-raw",
+        "quantity": 5
+      }
+    ],
+    "output": {
+      "type": "item",
+      "code": "angels-share:ginportion-breadfruit",
+      "litres": 10
+    }
+  }
+]
