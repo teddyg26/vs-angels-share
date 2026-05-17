@@ -1,6 +1,6 @@
 {
-  "code": "aging-whitedog",
-  "sealHours": 336,
+  "code": "continuous-aging-whitedog",
+  "sealHours": 999999,
   "ingredients": [
     {
       "type": "item",
@@ -16,7 +16,7 @@
   ],
   "output": {
     "type": "item",
-    "code": "game:spiritportion-{variant}",
-    "litres": 1
+    "code": "angels-share:spiritportion-{variant}",
+    "litres": 2
   }
 }

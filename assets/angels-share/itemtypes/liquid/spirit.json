@@ -1,5 +1,5 @@
 {
-  "code": "whitespiritportion",
+  "code": "spiritportion",
   "variantGroups": [
     {
       "code": "fruit",
@@ -25,29 +25,75 @@
       ]
     }
   ],
+  "skipVariants": [
+    "*-pinkapple",
+    "*-redapple",
+    "*-yellowapple",
+    "*-olive"
+  ],
   "class": "ItemLiquidPortionOverride",
   "matterState": "liquid",
   "attributes": {
     "handbook": {
       "ignoreCreativeInvStacks": true,
       "groupBy": [
-        "whitespiritportion-*"
+        "spiritportion-*"
       ]
+    },
+    "distillationProps": {
+      "distilledStack": {
+        "type": "item",
+        "code": "game:alcoholportion"
+      },
+      "ratio": 0.5
     },
     "waterTightContainerProps": {
       "containable": true,
       "itemsPerLitre": 100,
-      "texture": {
-        "base": "game:block/liquid/milkportion",
-        "alpha": 100
+      "texturebytype": {
+        "*-mead": {
+          "base": "game:block/liquid/honey",
+          "alpha": 100
+        },
+        "*-spelt": {
+          "base": "game:block/food/pie/fill-fish",
+          "alpha": 100
+        },
+        "*-rice": {
+          "base": "game:block/food/dairy/milk",
+          "alpha": 100
+        },
+        "*-rye": {
+          "base": "game:block/food/pie/fill-gooseberry",
+          "alpha": 100
+        },
+        "*-amaranth": {
+          "base": "game:block/food/pie/fill-poultry",
+          "alpha": 100
+        },
+        "*-cassava": {
+          "base": "game:block/food/pie/fill-cassava",
+          "alpha": 100
+        },
+        "*-breadfruit": {
+          "base": "game:block/food/pie/fill-breadfruit",
+          "alpha": 100
+        },
+        "*-elderberry": {
+          "base": "game:block/food/pie/fill-blueberry",
+          "alpha": 100
+        },
+        "*": {
+          "base": "game:block/food/pie/fill-{fruit}",
+          "alpha": 100
+        }
       },
-      "climateColorMap": null,
       "allowSpill": true,
       "whenSpilled": {
         "action": "DropContents",
         "stack": {
           "type": "item",
-          "code": "angels-share:whitespiritportion-{fruit}",
+          "code": "angels-share:spiritportion-{fruit}",
           "states": [
             "mead"
           ]
@@ -63,9 +109,43 @@
   "shape": {
     "base": "game:item/liquid"
   },
-  "texture": {
-    "base": "game:block/liquid/milkportion",
-    "alpha": 15
+  "texturebytype": {
+    "*-mead": {
+      "base": "game:block/liquid/honey",
+      "alpha": 100
+    },
+    "*-spelt": {
+      "base": "game:block/food/pie/fill-fish",
+      "alpha": 100
+    },
+    "*-rice": {
+      "base": "game:block/food/dairy/milk",
+      "alpha": 100
+    },
+    "*-rye": {
+      "base": "game:block/food/pie/fill-gooseberry",
+      "alpha": 100
+    },
+    "*-amaranth": {
+      "base": "game:block/food/pie/fill-poultry",
+      "alpha": 100
+    },
+    "*-cassava": {
+      "base": "game:block/food/pie/fill-cassava",
+      "alpha": 100
+    },
+    "*-breadfruit": {
+      "base": "game:block/food/pie/fill-breadfruit",
+      "alpha": 100
+    },
+    "*-elderberry": {
+      "base": "game:block/food/pie/fill-blueberry",
+      "alpha": 100
+    },
+    "*": {
+      "base": "game:block/food/pie/fill-{fruit}",
+      "alpha": 100
+    }
   },
   "creativeinventoryStacks": [
     {
@@ -81,7 +161,7 @@
             "ucontents": [
               {
                 "type": "item",
-                "code": "angels-share:whitespiritportion-{fruit}",
+                "code": "angels-share:spiritportion-{fruit}",
                 "states": [
                   "mead",
                   "spelt",

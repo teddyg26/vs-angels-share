@@ -1,0 +1,16 @@
+[
+  {
+    "file": "angels-share:itemtypes/liquid/spirit.json",
+    "op": "addmerge",
+    "path": "/attributes/distillationPropsbytype",
+    "value": {
+      "*": {
+        "distilledStack": {
+          "type": "item",
+          "code": "game:alcoholportion"
+        },
+        "ratio": 0.5
+      }
+    }
+  }
+]

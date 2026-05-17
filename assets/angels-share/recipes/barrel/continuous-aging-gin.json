@@ -1,0 +1,22 @@
+{
+  "code": "continuous-aging-gin",
+  "sealHours": 999999,
+  "ingredients": [
+    {
+      "type": "item",
+      "code": "angels-share:ginportion-{variant}",
+      "litres": 2
+    }
+  ],
+  "variantGroups": [
+    {
+      "code": "variant",
+      "states": [ "cassava", "breadfruit" ]
+    }
+  ],
+  "output": {
+    "type": "item",
+    "code": "angels-share:ginportion-{variant}",
+    "litres": 2
+  }
+}

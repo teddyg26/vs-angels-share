@@ -1,6 +1,6 @@
 {
-  "code": "aging-eaudevie",
-  "sealHours": 336,
+  "code": "continuous-aging-eaudevie",
+  "sealHours": 999999,
   "ingredients": [
     {
       "type": "item",
@@ -30,7 +30,7 @@
   ],
   "output": {
     "type": "item",
-    "code": "game:spiritportion-{variant}",
-    "litres": 1
+    "code": "angels-share:spiritportion-{variant}",
+    "litres": 2
   }
 }

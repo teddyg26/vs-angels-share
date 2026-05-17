@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>disable</ImplicitUsings>
+		<Nullable>disable</Nullable>
+		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+		<CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+		<OutputPath>C:\Users\teddy\AppData\Roaming\VintagestoryData\Mods\AngelsShare_0.4.0\</OutputPath>
+		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+	</PropertyGroup>
+	<ItemGroup>
+	  <Reference Include="0Harmony">
+	    <HintPath>..\..\..\AppData\Roaming\VSLGameVersions\1.22.2\Lib\0Harmony.dll</HintPath>
+	    <Private>false</Private>
+	  </Reference>
+	  <Reference Include="VintagestoryAPI">
+	    <HintPath>..\..\..\AppData\Roaming\VSLGameVersions\1.22.2\VintagestoryAPI.dll</HintPath>
+	    <Private>false</Private>
+	  </Reference>
+	  <Reference Include="VSEssentials">
+	    <HintPath>..\..\..\AppData\Roaming\VSLGameVersions\1.22.2\Mods\VSEssentials.dll</HintPath>
+	    <Private>false</Private>
+	  </Reference>
+	  <Reference Include="VSSurvivalMod">
+	    <HintPath>..\..\..\AppData\Roaming\VSLGameVersions\1.22.2\Mods\VSSurvivalMod.dll</HintPath>
+	    <Private>false</Private>
+	  </Reference>
+	</ItemGroup>
+</Project>
