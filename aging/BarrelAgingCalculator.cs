@@ -1,10 +1,6 @@
-﻿using HarmonyLib;
-using System;
+﻿using System;
 using System.Reflection;
-using System.Text;
-using Vintagestory.API.Client;
 using Vintagestory.API.Common;
-using Vintagestory.API.Config;
 using Vintagestory.API.Datastructures;
 using Vintagestory.API.MathTools;
 using Vintagestory.GameContent;
@@ -15,18 +11,12 @@ namespace AngelsShare
     {
         public static void InitializeAgingOnSeal(BlockEntityBarrel barrel, ItemSlot liquidSlot, ItemStack liquidStack)
         {
-            if (barrel?.Api == null || liquidSlot?.Itemstack == null || liquidStack == null)
-            {
-                return;
-            }
+            if (barrel?.Api == null || liquidSlot?.Itemstack == null || liquidStack == null) return;
 
             ICoreAPI api = barrel.Api;
             ITreeAttribute tree = liquidStack.Attributes.GetOrAddTreeAttribute("maturationData");
 
-            if (tree.HasAttribute("sealedAtTotalHours"))
-            {
-                return;
-            }
+            if (tree.HasAttribute("sealedAtTotalHours")) return;
 
             double nowTotalHours = api.World.Calendar.ElapsedHours;
 
@@ -88,10 +78,7 @@ namespace AngelsShare
 
         public static void FinalizeAgingOnUnseal(BlockEntityBarrel barrel, ItemSlot liquidSlot, ItemStack liquidStack)
         {
-            if (barrel?.Api == null || liquidSlot?.Itemstack == null || liquidStack == null)
-            {
-                return;
-            }
+            if (barrel?.Api == null || liquidSlot?.Itemstack == null || liquidStack == null) return;
 
             ICoreAPI api = barrel.Api;
             ITreeAttribute tree = liquidStack.Attributes.GetOrAddTreeAttribute("maturationData");
@@ -439,10 +426,7 @@ namespace AngelsShare
             double lower = Math.Min(intensity, smoothness);
             double higher = Math.Max(intensity, smoothness);
 
-            if (higher <= 0.0)
-            {
-                return 0.0;
-            }
+            if (higher <= 0.0) return 0.0;
 
             double closeness = lower / higher;
             double strength = lower / 100.0;
@@ -525,9 +509,7 @@ namespace AngelsShare
         )
         {
             if (tier != "reserve")
-            {
                 return "";
-            }
 
             bool exceptionalBalance =
                 quality >= 88.0 &&
@@ -556,9 +538,7 @@ namespace AngelsShare
             bool tightGrainTrait = profile.Trait == "tight-grain";
 
             if (exceptionalBalance && (unicornTrait || caskStrengthCandidate))
-            {
                 return "Unicorn: Cask-Strength Reserve";
-            }
 
             if (unicornAgeStatedCandidate && (unicornTrait || tightGrainTrait || safeWindowDays >= 130.0))
             {
@@ -567,9 +547,7 @@ namespace AngelsShare
             }
 
             if (caskStrengthCandidate)
-            {
                 return "Cask-Strength Reserve";
-            }
 
             if (ageStatedCandidate)
             {
@@ -582,10 +560,7 @@ namespace AngelsShare
 
         private static double CalculateProofFromIntensity(double intensity)
         {
-            if (intensity < 75.0)
-            {
-                return 0.0;
-            }
+            if (intensity < 75.0) return 0.0;
 
             double proof = 120.0 + ((intensity - 75.0) / 25.0) * 35.0;
 
@@ -600,39 +575,25 @@ namespace AngelsShare
         private static string GetMaturationDescriptor(double maturityRatio)
         {
             if (maturityRatio >= 1.12)
-            {
                 return "Over-Oaked";
-            }
 
             if (maturityRatio > 1.03)
-            {
                 return "Heavy Oak";
-            }
 
             if (maturityRatio >= 0.98)
-            {
                 return "At the Edge";
-            }
 
             if (maturityRatio >= 0.80)
-            {
                 return "Near Peak";
-            }
 
             if (maturityRatio >= 0.55)
-            {
                 return "Maturing";
-            }
 
             if (maturityRatio >= 0.25)
-            {
                 return "Developing";
-            }
 
             if (maturityRatio >= 0.05)
-            {
                 return "Resting";
-            }
 
             return "Raw";
         }
@@ -838,24 +799,16 @@ namespace AngelsShare
         private static object ConvertWorldHourToParameter(double worldHour, Type parameterType)
         {
             if (parameterType == typeof(double))
-            {
                 return worldHour;
-            }
 
             if (parameterType == typeof(float))
-            {
                 return (float)worldHour;
-            }
 
             if (parameterType == typeof(int))
-            {
                 return (int)worldHour;
-            }
 
             if (parameterType == typeof(long))
-            {
                 return (long)worldHour;
-            }
 
             return null;
         }
@@ -877,34 +830,22 @@ namespace AngelsShare
         private static string GetClimateStyle(double averageTemp, double averageRainfall)
         {
             if (averageTemp >= 28.0 && averageRainfall <= 0.35)
-            {
                 return "Hot Dry Fast-Maturation";
-            }
 
             if (averageTemp >= 28.0 && averageRainfall > 0.65)
-            {
                 return "Hot Humid Tropical Maturation";
-            }
 
             if (averageTemp <= 12.0 && averageRainfall > 0.65)
-            {
                 return "Cool Humid Slow-Aged";
-            }
 
             if (averageTemp <= 12.0 && averageRainfall <= 0.35)
-            {
                 return "Cool Dry Concentrated";
-            }
 
             if (averageRainfall > 0.70)
-            {
                 return "Humid Continental Maturation";
-            }
 
             if (averageRainfall < 0.30)
-            {
                 return "Dry Continental Maturation";
-            }
 
             return "Standard Continental Maturation";
         }
@@ -912,367 +853,12 @@ namespace AngelsShare
         private static double Clamp(double value, double min, double max)
         {
             if (value < min)
-            {
                 return min;
-            }
 
             if (value > max)
-            {
                 return max;
-            }
 
             return value;
-        }
-
-        private class AgingClimateSample
-        {
-            public float Temperature { get; set; }
-            public float Rainfall { get; set; }
-        }
-
-        private class CaskProfile
-        {
-            public string Trait { get; set; }
-            public double CaskVariance { get; set; }
-            public double IntensityBonus { get; set; }
-            public double SmoothnessBonus { get; set; }
-            public double QualityBonus { get; set; }
-            public double SafeWindowMultiplier { get; set; }
-            public double OverOakResistance { get; set; }
-        }
-    }
-
-    public class AgingSnapshot
-    {
-        public double TotalHours { get; set; }
-        public double AgeHours { get; set; }
-        public double AgeDays { get; set; }
-
-        public double SafeWindowDays { get; set; }
-        public double MaturityRatio { get; set; }
-        public double OverAgeRatio { get; set; }
-
-        public double Quality { get; set; }
-        public double Intensity { get; set; }
-        public double Smoothness { get; set; }
-        public double Balance { get; set; }
-
-        public double AverageTemperature { get; set; }
-        public double AverageRainfall { get; set; }
-        public double AverageHumidityModifier { get; set; }
-
-        public string ClimateStyle { get; set; }
-        public string MaturationDescriptor { get; set; }
-        public string CaskTrait { get; set; }
-        public string Tier { get; set; }
-        public string SpecialStyle { get; set; }
-
-        public double Proof { get; set; }
-        public double AgeStatementYears { get; set; }
-    }
-
-    [HarmonyPatch(typeof(BlockEntityBarrel), "OnReceivedClientPacket")]
-    public static class BarrelSealPacketPatch
-    {
-        [HarmonyPostfix]
-        public static void Postfix(BlockEntityBarrel __instance, IPlayer player, int packetid, byte[] data)
-        {
-            if (__instance?.Api == null)
-            {
-                return;
-            }
-
-            if (__instance.Api.Side != EnumAppSide.Server)
-            {
-                return;
-            }
-
-            if (!__instance.Sealed)
-            {
-                return;
-            }
-
-            ItemSlot liquidSlot = __instance.Inventory[BarrelAgingUtil.LiquidSlotId];
-
-            if (liquidSlot?.Itemstack == null)
-            {
-                return;
-            }
-
-            ItemStack liquidStack = liquidSlot.Itemstack;
-
-            if (!BarrelAgingUtil.IsAgeableSpirit(liquidStack))
-            {
-                return;
-            }
-
-            BarrelAgingCalculator.InitializeAgingOnSeal(__instance, liquidSlot, liquidStack);
-        }
-    }
-
-    [HarmonyPatch(typeof(BlockBarrel), "OnBlockInteractStart")]
-    public static class BarrelManualUnsealPatch
-    {
-        [HarmonyPrefix]
-        public static bool Prefix(BlockBarrel __instance, IWorldAccessor world, IPlayer byPlayer, BlockSelection blockSel, ref bool __result)
-        {
-            if (world == null || byPlayer == null || blockSel?.Position == null)
-            {
-                return true;
-            }
-
-            BlockEntityBarrel barrel = world.BlockAccessor.GetBlockEntity(blockSel.Position) as BlockEntityBarrel;
-
-            if (barrel == null)
-            {
-                return true;
-            }
-
-            if (!barrel.Sealed)
-            {
-                return true;
-            }
-
-            ItemSlot liquidSlot = barrel.Inventory[BarrelAgingUtil.LiquidSlotId];
-
-            if (liquidSlot?.Itemstack == null)
-            {
-                return true;
-            }
-
-            ItemStack liquidStack = liquidSlot.Itemstack;
-
-            if (!BarrelAgingUtil.IsAgeableSpirit(liquidStack))
-            {
-                return true;
-            }
-
-            bool isSneaking = byPlayer.Entity?.Controls?.Sneak == true
-                || byPlayer.WorldData?.EntityControls?.ShiftKey == true;
-
-            if (!isSneaking)
-            {
-                __result = true;
-                return false;
-            }
-
-            if (world.Side == EnumAppSide.Client)
-            {
-                __result = true;
-                return false;
-            }
-
-            BarrelAgingCalculator.FinalizeAgingOnUnseal(barrel, liquidSlot, liquidStack);
-
-            ITreeAttribute oldTree = liquidStack.Attributes?.GetTreeAttribute("maturationData");
-
-            barrel.Api.Logger.Notification(
-                "[Angel's Share] Before conversion: stack={0}, hasTree={1}, ageDays={2:F2}, quality={3:F2}, intensity={4:F1}, smoothness={5:F1}, maturity={6:F3}, tier={7}, special={8}",
-                liquidStack.Collectible.Code,
-                oldTree != null,
-                oldTree?.GetDouble("ageDays", 0.0) ?? -1,
-                oldTree?.GetDouble("quality", 0.0) ?? -1,
-                oldTree?.GetDouble("intensity", 0.0) ?? -1,
-                oldTree?.GetDouble("smoothness", 0.0) ?? -1,
-                oldTree?.GetDouble("maturityRatio", 0.0) ?? -1,
-                oldTree?.GetString("ageTier", "missing") ?? "missing",
-                oldTree?.GetString("specialStyle", "") ?? ""
-            );
-
-            bool converted = BarrelAgingUtil.ConvertAgingSpiritOnUnseal(barrel.Api, liquidSlot);
-
-            if (converted)
-            {
-                barrel.Sealed = false;
-                barrel.MarkDirty(true);
-                barrel.Api.World.BlockAccessor.MarkBlockEntityDirty(barrel.Pos);
-                barrel.Api.World.PlaySoundAt(new AssetLocation("sounds/block/barrelopen"), barrel.Pos.X, barrel.Pos.Y, barrel.Pos.Z, byPlayer);
-            }
-
-            __result = true;
-            return false;
-        }
-    }
-
-    [HarmonyPatch(typeof(BlockEntity), "GetBlockInfo")]
-    public static class BarrelBlockInfoPatch
-    {
-        [HarmonyPostfix]
-        public static void Postfix(BlockEntity __instance, IPlayer forPlayer, StringBuilder dsc)
-        {
-            if (__instance is not BlockEntityBarrel barrel)
-            {
-                return;
-            }
-
-            ItemSlot liquidSlot = barrel.Inventory[BarrelAgingUtil.LiquidSlotId];
-
-            if (liquidSlot?.Itemstack == null)
-            {
-                return;
-            }
-
-            ItemStack liquidStack = liquidSlot.Itemstack;
-            ITreeAttribute tree = liquidStack.Attributes.GetTreeAttribute("maturationData");
-
-            if (barrel.Sealed && BarrelAgingUtil.IsAgeableSpirit(liquidStack))
-            {
-                if (tree == null || !tree.HasAttribute("sealedAtTotalHours"))
-                {
-                    dsc.AppendLine();
-                    dsc.AppendLine("[Angel's Share: Maturation Tracker]");
-                    dsc.AppendLine("- Aging data not initialized yet.");
-                    dsc.AppendLine("- If you just sealed the barrel, close and reopen the barrel GUI.");
-                    dsc.AppendLine("- Sneak-right-click to end aging.");
-                    return;
-                }
-
-                AgingSnapshot projected = BarrelAgingCalculator.GetProjectedAging(barrel, liquidStack);
-
-                dsc.AppendLine();
-                dsc.AppendLine("[Angel's Share: Maturation Tracker]");
-                dsc.AppendLine("- Maturation: " + projected.MaturationDescriptor);
-                dsc.AppendLine(string.Format("- Quality: {0:F1}%", projected.Quality));
-                dsc.AppendLine(string.Format("- Intensity: {0:F0}", projected.Intensity));
-                dsc.AppendLine(string.Format("- Smoothness: {0:F0}", projected.Smoothness));
-                dsc.AppendLine("- Climate Style: " + projected.ClimateStyle);
-
-                if (projected.MaturationDescriptor == "Heavy Oak" || projected.MaturationDescriptor == "Over-Oaked")
-                {
-                    dsc.AppendLine("- Warning: heavy wood extraction is developing.");
-                }
-
-                dsc.AppendLine("- Sneak-right-click to end aging.");
-                return;
-            }
-
-            if (tree != null && tree.GetBool("angelsshareAged", false))
-            {
-                double ageDays = tree.GetDouble("ageDays", 0.0);
-                double quality = tree.GetDouble("quality", 0.0);
-                double intensity = tree.GetDouble("intensity", 0.0);
-                double smoothness = tree.GetDouble("smoothness", 0.0);
-                string tier = tree.GetString("ageTier", BarrelAgingUtil.GetAgeTierFromMaturity(liquidStack, tree.GetDouble("maturityRatio", 0.0), quality, intensity, smoothness));
-                string specialStyle = tree.GetString("specialStyle", "");
-
-                dsc.AppendLine();
-                dsc.AppendLine("[Angel's Share: Maturation]");
-                dsc.AppendLine("- Tier: " + tier);
-
-                if (specialStyle.Length > 0)
-                {
-                    dsc.AppendLine("- " + specialStyle);
-                }
-
-                dsc.AppendLine(string.Format("- Time Matured: {0:F2} days", ageDays));
-                dsc.AppendLine(string.Format("- Quality: {0:F1}%", quality));
-                dsc.AppendLine(string.Format("- Intensity: {0:F0}", intensity));
-                dsc.AppendLine(string.Format("- Smoothness: {0:F0}", smoothness));
-                dsc.AppendLine("- Climate Style: " + tree.GetString("climateStyle", "Standard Continental Maturation"));
-
-                double proof = tree.GetDouble("proof", 0.0);
-
-                if (proof > 0.0)
-                {
-                    dsc.AppendLine(string.Format("- Estimated Strength: {0:F0} proof", proof));
-                }
-
-                if (tier == "over-oaked")
-                {
-                    dsc.AppendLine("- Condition: Bitter, excessive wood extraction.");
-                }
-            }
-        }
-    }
-
-    [HarmonyPatch]
-    public static class BarrelGuiContinuousAgingTextPatch
-    {
-        public static MethodBase TargetMethod()
-        {
-            return AccessTools.Method(typeof(GuiDialogBarrel), "getContentsText");
-        }
-
-        [HarmonyPostfix]
-        public static void Postfix(GuiDialogBarrel __instance, ref string __result)
-        {
-            try
-            {
-                BlockPos pos = AccessTools.Field(typeof(GuiDialogBlockEntity), "BlockEntityPosition")
-                    ?.GetValue(__instance) as BlockPos;
-
-                if (pos == null)
-                {
-                    return;
-                }
-
-                ICoreClientAPI capi = AccessTools.Field(typeof(GuiDialog), "capi")
-                    ?.GetValue(__instance) as ICoreClientAPI;
-
-                if (capi == null)
-                {
-                    return;
-                }
-
-                BlockEntityBarrel barrel = capi.World.BlockAccessor.GetBlockEntity(pos) as BlockEntityBarrel;
-
-                if (barrel == null || barrel.CurrentRecipe == null)
-                {
-                    return;
-                }
-
-                ItemSlot liquidSlot = barrel.Inventory[BarrelAgingUtil.LiquidSlotId];
-
-                if (liquidSlot?.Itemstack == null)
-                {
-                    return;
-                }
-
-                if (!BarrelAgingUtil.IsAgeableSpirit(liquidSlot.Itemstack))
-                {
-                    return;
-                }
-
-                ItemStack outStack = barrel.CurrentRecipe.RecipeOutput.ResolvedItemStack;
-                WaterTightContainableProps props = BlockLiquidContainerBase.GetContainableProps(outStack);
-
-                if (props == null)
-                {
-                    return;
-                }
-
-                string incontainername = Lang.Get(
-                    outStack.Collectible.Code.Domain
-                    + ":incontainer-"
-                    + outStack.Class.ToString().ToLowerInvariant()
-                    + "-"
-                    + outStack.Collectible.Code.Path
-                );
-
-                float litres = (float)barrel.CurrentOutSize / props.ItemsPerLitre;
-
-                string oldTextStart = "Will turn into ";
-                int oldTextIndex = __result.IndexOf(oldTextStart, StringComparison.Ordinal);
-
-                if (oldTextIndex < 0)
-                {
-                    return;
-                }
-
-                string before = __result.Substring(0, oldTextIndex);
-
-                string replacement = Lang.Get(
-                    "angels-share:barrel-will-age-into-after-sealing",
-                    litres,
-                    incontainername
-                );
-
-                __result = before + replacement;
-            }
-            catch
-            {
-                // Avoid breaking the barrel GUI if reflection fails.
-            }
         }
     }
 }
