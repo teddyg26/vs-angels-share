@@ -1,5 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
+
 using Vintagestory.API.Common;
 using Vintagestory.API.Datastructures;
 using Vintagestory.API.MathTools;
@@ -542,7 +545,7 @@ namespace AngelsShare
 
             if (unicornAgeStatedCandidate && (unicornTrait || tightGrainTrait || safeWindowDays >= 130.0))
             {
-                int years = (int)Math.Max(1.0, Math.Floor(CalculateAgeStatementYears(ageDays))) + 12;
+                int years = (int)CalculateAgeStatementYears(ageDays);
                 return "Unicorn: " + years + "-Year Old Reserve";
             }
 
@@ -551,7 +554,7 @@ namespace AngelsShare
 
             if (ageStatedCandidate)
             {
-                int years = (int)Math.Max(1.0, Math.Floor(CalculateAgeStatementYears(ageDays))) + 8;
+                int years = (int)CalculateAgeStatementYears(ageDays);
                 return years + "-Year Old Reserve";
             }
 
@@ -569,7 +572,14 @@ namespace AngelsShare
 
         private static double CalculateAgeStatementYears(double ageDays)
         {
-            return Math.Max(0.0, ageDays / 30.0);
+            if (ageDays < 60.0)
+            {
+                return 0.0;
+            }
+
+            double years = 8.0 + ((ageDays - 60.0) / 10.0);
+
+            return Math.Min(25.0, Math.Floor(years));
         }
 
         private static string GetMaturationDescriptor(double maturityRatio)
@@ -598,14 +608,108 @@ namespace AngelsShare
             return "Raw";
         }
 
-        private static CaskProfile RollCaskProfile(BlockEntityBarrel barrel, ItemStack liquidStack, double sealedAtTotalHours)
+        private class CaskTraitRule
         {
-            int seed = MakeCaskSeed(barrel, liquidStack, sealedAtTotalHours);
-            Random rand = new Random(seed);
+            public double UpperRoll { get; set; }
+            public System.Func<Random, CaskProfile> CreateProfile { get; set; }
+        }
 
-            double roll = rand.NextDouble();
+        private static readonly CaskTraitRule[] CaskTraitRules =
+        {
+            new CaskTraitRule
+            {
+                UpperRoll = 0.005,
+                CreateProfile = rand => new CaskProfile
+                {
+                    Trait = "flawed",
+                    CaskVariance = 0.85 + (rand.NextDouble() * 0.08),
+                    IntensityBonus = -12.0,
+                    SmoothnessBonus = -12.0,
+                    QualityBonus = -18.0,
+                    SafeWindowMultiplier = 0.90,
+                    OverOakResistance = 1.15
+                }
+            },
 
-            CaskProfile profile = new CaskProfile
+            new CaskTraitRule
+            {
+                UpperRoll = 0.025,
+                CreateProfile = rand => new CaskProfile
+                {
+                    Trait = "unicorn",
+                    CaskVariance = 1.02 + (rand.NextDouble() * 0.16),
+                    IntensityBonus = 22.0,
+                    SmoothnessBonus = 22.0,
+                    QualityBonus = 14.0 + (rand.NextDouble() * 8.0),
+                    SafeWindowMultiplier = 1.12,
+                    OverOakResistance = 0.85,
+                }
+            },
+
+            new CaskTraitRule
+            {
+                UpperRoll = 0.060,
+                CreateProfile = rand => new CaskProfile
+                {
+                    Trait = "tight-grain",
+                    CaskVariance = 1.02 + (rand.NextDouble() * 0.16),
+                    IntensityBonus = 22.0,
+                    SmoothnessBonus = 22.0,
+                    QualityBonus = 14.0 + (rand.NextDouble() * 8.0),
+                    SafeWindowMultiplier = 1.12,
+                    OverOakResistance = 0.85,
+                }
+            },
+
+            new CaskTraitRule
+            {
+                UpperRoll = 0.100,
+                CreateProfile = rand => new CaskProfile
+                {
+                    Trait = "wide-grain",
+                    CaskVariance = 1.05 + (rand.NextDouble() * 0.14),
+                    IntensityBonus = 16.0,
+                    SmoothnessBonus = -4.0,
+                    QualityBonus = 2.0 + (rand.NextDouble() * 5.0),
+                    SafeWindowMultiplier = 0.85,
+                    OverOakResistance = 1.18,
+                }
+            },
+
+            new CaskTraitRule
+            {
+                UpperRoll = 0.170,
+                CreateProfile = rand => new CaskProfile
+                {
+                    Trait = "gentle",
+                    CaskVariance = 0.94 + (rand.NextDouble() * 0.12),
+                    IntensityBonus = -2.0,
+                    SmoothnessBonus = 16.0,
+                    QualityBonus = 4.0 + (rand.NextDouble() * 6.0),
+                    SafeWindowMultiplier = 1.08,
+                    OverOakResistance = 0.92,
+                }
+            },
+
+            new CaskTraitRule
+            {
+                UpperRoll = 0.240,
+                CreateProfile = rand => new CaskProfile
+                {
+                    Trait = "expressive",
+                    CaskVariance = 0.98 + (rand.NextDouble() * 0.14),
+                    IntensityBonus = 16.0,
+                    SmoothnessBonus = 0.0,
+                    QualityBonus = 4.0 + (rand.NextDouble() * 6.0),
+                    SafeWindowMultiplier = 1.0,
+                    OverOakResistance = 1.0,
+                }
+            }
+        };
+
+        private static CaskProfile CreateStandardCaskProfile(Random rand)
+        {
+            return new CaskProfile
             {
                 Trait = "standard",
                 CaskVariance = 0.92 + (rand.NextDouble() * 0.16),
@@ -613,71 +717,26 @@ namespace AngelsShare
                 SmoothnessBonus = 0.0,
                 QualityBonus = -2.0 + (rand.NextDouble() * 7.0),
                 SafeWindowMultiplier = 1.0,
-                OverOakResistance = 1.0
+                OverOakResistance = 1.0,
             };
+        }
 
-            if (roll < 0.005)
+        private static CaskProfile RollCaskProfile(BlockEntityBarrel barrel, ItemStack liquidStack, double sealedAtTotalHours)
+        {
+            int seed = MakeCaskSeed(barrel, liquidStack, sealedAtTotalHours);
+            Random rand = new Random(seed);
+
+            double roll = rand.NextDouble();
+
+            CaskTraitRule selectedRule = CaskTraitRules
+                .FirstOrDefault(rule => roll < rule.UpperRoll);
+
+            if (selectedRule != null)
             {
-                profile.Trait = "flawed";
-                profile.CaskVariance = 0.85 + (rand.NextDouble() * 0.08);
-                profile.IntensityBonus = -12.0;
-                profile.SmoothnessBonus = -12.0;
-                profile.QualityBonus = -18.0;
-                profile.SafeWindowMultiplier = 0.90;
-                profile.OverOakResistance = 1.15;
-            }
-            else if (roll < 0.025)
-            {
-                profile.Trait = "unicorn";
-                profile.CaskVariance = 1.02 + (rand.NextDouble() * 0.16);
-                profile.IntensityBonus = 22.0;
-                profile.SmoothnessBonus = 22.0;
-                profile.QualityBonus = 14.0 + (rand.NextDouble() * 8.0);
-                profile.SafeWindowMultiplier = 1.12;
-                profile.OverOakResistance = 0.85;
-            }
-            else if (roll < 0.060)
-            {
-                profile.Trait = "tight-grain";
-                profile.CaskVariance = 0.90 + (rand.NextDouble() * 0.10);
-                profile.IntensityBonus = -4.0;
-                profile.SmoothnessBonus = 14.0;
-                profile.QualityBonus = 5.0 + (rand.NextDouble() * 6.0);
-                profile.SafeWindowMultiplier = 1.22;
-                profile.OverOakResistance = 0.82;
-            }
-            else if (roll < 0.100)
-            {
-                profile.Trait = "wide-grain";
-                profile.CaskVariance = 1.05 + (rand.NextDouble() * 0.14);
-                profile.IntensityBonus = 16.0;
-                profile.SmoothnessBonus = -4.0;
-                profile.QualityBonus = 2.0 + (rand.NextDouble() * 5.0);
-                profile.SafeWindowMultiplier = 0.85;
-                profile.OverOakResistance = 1.18;
-            }
-            else if (roll < 0.170)
-            {
-                profile.Trait = "gentle";
-                profile.CaskVariance = 0.94 + (rand.NextDouble() * 0.12);
-                profile.IntensityBonus = -2.0;
-                profile.SmoothnessBonus = 16.0;
-                profile.QualityBonus = 4.0 + (rand.NextDouble() * 6.0);
-                profile.SafeWindowMultiplier = 1.08;
-                profile.OverOakResistance = 0.92;
-            }
-            else if (roll < 0.240)
-            {
-                profile.Trait = "expressive";
-                profile.CaskVariance = 0.98 + (rand.NextDouble() * 0.14);
-                profile.IntensityBonus = 16.0;
-                profile.SmoothnessBonus = 0.0;
-                profile.QualityBonus = 4.0 + (rand.NextDouble() * 6.0);
-                profile.SafeWindowMultiplier = 1.0;
-                profile.OverOakResistance = 1.0;
+                return selectedRule.CreateProfile(rand);
             }
 
-            return profile;
+            return CreateStandardCaskProfile(rand);
         }
 
         private static CaskProfile GetStoredCaskProfile(ITreeAttribute tree)
@@ -750,32 +809,29 @@ namespace AngelsShare
         {
             object blockAccessor = api.World.BlockAccessor;
 
-            MethodInfo[] methods = blockAccessor.GetType().GetMethods();
+            var candidateMethods = blockAccessor
+                .GetType()
+                .GetMethods()
+                .Where(method => method.Name == "GetClimateAt")
+                .Select(method => new
+                {
+                    Method = method,
+                    Parameters = method.GetParameters()
+                })
+                .Where(candidate => candidate.Parameters.Length == 3);
 
-            foreach (MethodInfo method in methods)
+            foreach (var candidate in candidateMethods)
             {
-                if (method.Name != "GetClimateAt")
-                {
-                    continue;
-                }
+                object thirdArgument = ConvertWorldHourToParameter(
+                    worldHour,
+                    candidate.Parameters[2].ParameterType
+                );
 
-                ParameterInfo[] parameters = method.GetParameters();
-
-                if (parameters.Length != 3)
-                {
-                    continue;
-                }
-
-                object thirdArgument = ConvertWorldHourToParameter(worldHour, parameters[2].ParameterType);
-
-                if (thirdArgument == null)
-                {
-                    continue;
-                }
+                if (thirdArgument == null) continue;
 
                 try
                 {
-                    object result = method.Invoke(
+                    object result = candidate.Method.Invoke(
                         blockAccessor,
                         new object[]
                         {
@@ -785,7 +841,8 @@ namespace AngelsShare
                         }
                     );
 
-                    return result as ClimateCondition;
+                    if (result is ClimateCondition climate)
+                        return climate;
                 }
                 catch
                 {
