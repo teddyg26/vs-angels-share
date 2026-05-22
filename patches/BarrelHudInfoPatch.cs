@@ -58,7 +58,7 @@ namespace AngelsShare
                 string text =
                     "[Angel's Share]\n" +
                     "Maturation: " + projected.MaturationDescriptor + "\n" +
-                    string.Format("Quality: {0:F0}%\n", projected.Quality) +
+                    "Quality: " + AgingDisplayUtil.GetQualityBand(projected.Quality) + "\n" +
                     "Character: " + GetHudCharacter(projected.Intensity, projected.Smoothness);
 
                 if (

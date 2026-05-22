@@ -18,7 +18,7 @@ namespace AngelsShare
             return stack?.Attributes?.GetTreeAttribute("maturationData");
         }
 
-        private static string GetQualityBand(double quality)
+        public static string GetQualityBand(double quality)
         {
             if (quality >= 90.0) return "Excellent";
             if (quality >= 75.0) return "Very Good";
@@ -52,20 +52,15 @@ namespace AngelsShare
         {
             if (tree == null) return;
 
-            string tier = GetDisplayTier(tree);
+            string tier = tree.GetString("ageTier", "unknown");
+            string displayTier = GetDisplayTier(tree);
             string specialStyle = tree.GetString("specialStyle", "");
             double quality = tree.GetDouble("quality", 0.0);
             string maturation = tree.GetString("maturationDescriptor", "Unknown");
 
             dsc.AppendLine();
             dsc.AppendLine("[Angel's Share]");
-            dsc.AppendLine("- " + Lang.Get(BarrelAgingUtil.GetLangKeyForAgeTier(tier)));
-
-            if (specialStyle.Length > 0)
-            {
-                dsc.AppendLine("- " + specialStyle);
-            }
-
+            dsc.AppendLine("- " + displayTier);
             dsc.AppendLine(string.Format("- Quality: {0:F1}%", quality));
             dsc.AppendLine("- Maturation: " + maturation);
             dsc.AppendLine("Hold Shift before hovering for more details.");
@@ -76,7 +71,7 @@ namespace AngelsShare
             if (tree == null) return;
 
             string tier = tree.GetString("ageTier", "unknown");
-            string tierName = GetDisplayTier(tree);
+            string displayTier = GetDisplayTier(tree);
             string specialStyle = tree.GetString("specialStyle", "");
 
             double ageDays = tree.GetDouble("ageDays", 0.0);
@@ -90,7 +85,7 @@ namespace AngelsShare
 
             dsc.AppendLine();
             dsc.AppendLine("[Angel's Share: Barrel Maturation]");
-            dsc.AppendLine("- Tier: " + tierName);
+            dsc.AppendLine("- Tier: " + displayTier);
             dsc.AppendLine(string.Format("- Quality: {0:F1}%", quality));
             dsc.AppendLine("- Maturation: " + maturation);
             dsc.AppendLine(string.Format("- Time Matured: {0:F1} days", ageDays));
@@ -170,7 +165,7 @@ namespace AngelsShare
             {
                 if (specialStyle.Contains("Cask-Strength") && proof > 0.0)
                 {
-                    dsc.AppendLine(string.Format("Cask-Strength · {0:F0} proof", proof));
+                    dsc.AppendLine(string.Format("{0:F0} proof", proof));
                 }
                 else
                 {
