@@ -1,30 +1,70 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-	<PropertyGroup>
-		<TargetFramework>net10.0</TargetFramework>
-		<ImplicitUsings>disable</ImplicitUsings>
-		<Nullable>disable</Nullable>
-		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-		<CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
-		<OutputPath>$(APPDATA)\VintagestoryData\Mods\AngelsShare_dev\</OutputPath>
-		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-	</PropertyGroup>
 
-	<ItemGroup>
-		<Reference Include="0Harmony">
-			<HintPath>..\..\..\AppData\Roaming\VSLGameVersions\1.22.2\Lib\0Harmony.dll</HintPath>
-			<Private>false</Private>
-		</Reference>
-		<Reference Include="VintagestoryAPI">
-			<HintPath>..\..\..\AppData\Roaming\VSLGameVersions\1.22.2\VintagestoryAPI.dll</HintPath>
-			<Private>false</Private>
-		</Reference>
-		<Reference Include="VSEssentials">
-			<HintPath>..\..\..\AppData\Roaming\VSLGameVersions\1.22.2\Mods\VSEssentials.dll</HintPath>
-			<Private>false</Private>
-		</Reference>
-		<Reference Include="VSSurvivalMod">
-			<HintPath>..\..\..\AppData\Roaming\VSLGameVersions\1.22.2\Mods\VSSurvivalMod.dll</HintPath>
-			<Private>false</Private>
-		</Reference>
-	</ItemGroup>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+
+    <ModId>AngelsShare_dev</ModId>
+
+    <OutputPath Condition="'$(VINTAGE_STORY_DATA)' != ''">$(VINTAGE_STORY_DATA)/Mods/$(ModId)/</OutputPath>
+    <OutputPath Condition="'$(VINTAGE_STORY_DATA)' == '' And '$(OS)' == 'Windows_NT'">$(APPDATA)/VintagestoryData/Mods/$(ModId)/</OutputPath>
+    <OutputPath Condition="'$(VINTAGE_STORY_DATA)' == '' And '$(OS)' != 'Windows_NT'">$(HOME)/Library/Application Support/VintagestoryData/Mods/$(ModId)/</OutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="0Harmony">
+      <HintPath>$(VINTAGE_STORY)/Lib/0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <Reference Include="VintagestoryAPI">
+      <HintPath>$(VINTAGE_STORY)/VintagestoryAPI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <Reference Include="VSEssentials">
+      <HintPath>$(VINTAGE_STORY)/Mods/VSEssentials.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <Reference Include="VSSurvivalMod">
+      <HintPath>$(VINTAGE_STORY)/Mods/VSSurvivalMod.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
 </Project>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
