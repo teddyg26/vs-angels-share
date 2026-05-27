@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Text;
-
+using Vintagestory.API.Common;
 using Vintagestory.API.Config;
 using Vintagestory.API.Datastructures;
 
@@ -114,31 +114,220 @@ namespace AngelsShare
             dsc.AppendLine("agedInto: " + tree.GetString("agedInto", "none"));
         }
 
-        public static string GetAgedSpiritDisplayName(Vintagestory.API.Common.ItemStack liquidStack, ITreeAttribute tree)
+        private static string StripLiquidPrefix(string langPath)
         {
-            if (liquidStack?.Collectible?.Code == null || tree == null)
+            if (langPath.StartsWith("liquid-"))
+            {
+                return langPath.Substring("liquid-".Length);
+            }
+
+            return langPath;
+        }
+
+        private static bool IsMissingLangValue(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return true;
+            }
+
+            if (value.StartsWith("game:") || value.StartsWith("angels-share:"))
+            {
+                return true;
+            }
+
+            if (value.StartsWith("item-") || value.StartsWith("incontainer-item-"))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private static string NormalizeSpiritDisplayName(string localized)
+        {
+            if (string.IsNullOrEmpty(localized))
+                return "Spirit";
+            
+            localized = StripAgingPrefix(localized);
+
+            int openParen = localized.IndexOf('(');
+            int closeParen = localized.IndexOf(')');
+
+            if (openParen >= 0 && closeParen > openParen)
+            {
+                string baseName = localized.Substring(0, openParen).Trim();
+                string variant = localized.Substring(openParen + 1, closeParen - openParen - 1).Trim();
+
+                if (!string.IsNullOrEmpty(baseName) && !string.IsNullOrEmpty(variant))
+                {
+                    return variant + " " + baseName;
+                }
+            }
+
+            return localized;
+        }
+
+        private static string StripAgingPrefix(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+                return "Spirit";
+            
+            if (name.StartsWith("Aged "))
+            {
+                return name.Substring("Aged ".Length);
+            }
+
+            if (name.StartsWith("White "))
+            {
+                return name.Substring("White ".Length);
+            }
+
+            if (name.StartsWith("White / Unaged "))
+            {
+                return name.Substring("White / Unaged ".Length);
+            }
+
+            return name;
+        }
+
+        private static string FallbackNameFromPath(string langPath)
+        {
+            string value = langPath;
+
+            int slashIndex = value.LastIndexOf('/');
+            if (slashIndex >= 0 && slashIndex < value.Length - 1)
+                value = value.Substring(slashIndex + 1);
+
+            value = value.Replace("Liquid-", "");
+            value = value.Replace("spiritportion-", "");
+            value = value.Replace("whitespiritportion-", "");
+            value = value.Replace("ginportion-", "");
+
+            if (string.IsNullOrEmpty(value))
+                return "Spirit";
+
+            return ToTitleCaseWords(value) + " Spirit";
+        }
+
+        private static string ToTitleCaseWords(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return "Unknown";
+
+            string[] parts = value.Split('-');
+
+            for (int i = 0 ; i < parts.Length; i++)
+            {
+                if (parts[i].Length == 0)
+                    continue;
+                
+                if (parts[i].Length == 1)
+                {
+                    parts[i] = parts[i].ToUpperInvariant();
+                }
+                else
+                {
+                    parts[i] =
+                        char.ToUpperInvariant(parts[i][0]) +
+                        parts[i].Substring(1).ToLowerInvariant();
+                }
+            }
+
+            return string.Join(" ", parts);
+        }
+
+        private static string GetSpiritNameFromVariant(ItemStack liquidStack)
+        {
+            if (liquidStack?.Collectible?.Code == null)
+                return "Spirit";
+
+            AssetLocation code = liquidStack.Collectible.Code;
+
+            string domain = code.Domain;
+            string path = code.Path;
+
+            // Flatten lang key from liquid/spiritportion to liquid-spiritportion
+            string langPath = path.Replace("/", "-");
+
+            // If called on whitespirit, turn into spirit (this shouldn't happen?)
+            langPath = langPath.Replace("whitespiritportion-", "spiritportion-");
+
+            string localized = Lang.GetMatching(domain + ":incontainer-item-" + StripLiquidPrefix(langPath));
+
+            if (IsMissingLangValue(localized))
+            {
+                localized = Lang.GetMatching(domain + ":item-" + langPath);
+            }
+
+            if (IsMissingLangValue(localized))
+            {
+                localized = Lang.GetMatching("game:incontainer-item-" + StripLiquidPrefix(langPath));
+            }
+
+            if (IsMissingLangValue(localized))
+            {
+                localized = Lang.GetMatching("game:item-" + langPath);
+            }
+
+            if (IsMissingLangValue(localized))
+            {
+                return FallbackNameFromPath(langPath);
+            }
+
+            return NormalizeSpiritDisplayName(localized);
+        }
+
+        public static string GetAgedSpiritDisplayName(ItemStack liquidStack, ITreeAttribute tree)
+        {
+            if (liquidStack?.Collectible?.Code == null)
                 return "Aged Spirit";
 
-            string path = liquidStack.Collectible.Code.Path;
-            string variant = path.Contains("-")
-                ? path.Substring(path.LastIndexOf('-') + 1)
-                : "spirit";
+            string baseSpiritName = GetSpiritNameFromVariant(liquidStack);
 
-            string prettyVariant = char.ToUpperInvariant(variant[0]) + variant.Substring(1);
+            if (tree == null)
+                return baseSpiritName;
 
+            string specialStyle = tree.GetString("specialStyle", "");
             double proof = tree.GetDouble("proof", 0.0);
-            string tier = tree.GetString("ageTier", "aged");
+            double ageStatementYears = tree.GetDouble("ageStatementYears", 0.0);
 
-            if (proof > 0.0 && tier == "reserve")
-                return string.Format("{0:F0} Proof {1} Whiskey", proof, prettyVariant);
+            bool isCaskStrength =
+                proof > 0.0 &&
+                specialStyle.Contains("Cask-Strength");
 
-            if (tier == "aged" || tier == "reserve")
-                return "Aged " + prettyVariant + " Whiskey";
+            bool hasAgeStatement =
+                ageStatementYears >= 8.0;
 
-            if (tier == "over-oaked")
-                return "Over-Oaked " + prettyVariant + " Whiskey";
+            if (isCaskStrength && hasAgeStatement)
+            {
+                return string.Format(
+                    "{0:F0} Proof {1}-Year Old {2}",
+                    proof,
+                    (int)ageStatementYears,
+                    baseSpiritName
+                );
+            }
 
-            return prettyVariant + " Whiskey";
+            if (isCaskStrength)
+            {
+                return string.Format(
+                    "{0:F0} Proof {1}",
+                    proof,
+                    baseSpiritName
+                );
+            }
+
+            if (hasAgeStatement)
+            {
+                return string.Format(
+                    "{0}-Year Old {1}",
+                    (int)ageStatementYears,
+                    baseSpiritName
+                );
+            }
+
+            return "Aged " + baseSpiritName;
         }
 
         public static void AppendFinalizedBarrelGuiCompact(StringBuilder dsc, ITreeAttribute tree)
