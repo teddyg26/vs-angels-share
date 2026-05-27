@@ -46,7 +46,7 @@ namespace AngelsShare
             tree.SetDouble("ageHours", 0.0);
             tree.SetDouble("ageDays", 0.0);
             tree.SetDouble("ageHoursTotal", 0.0);
-            tree.SetDouble("safeWindowDays", 60.0);
+            tree.SetDouble("safeWindowDays", 18.0);
             tree.SetDouble("maturityRatio", 0.0);
             tree.SetDouble("overAgeRatio", 0.0);
 
@@ -115,13 +115,25 @@ namespace AngelsShare
             barrel.MarkDirty(true);
             api.World.BlockAccessor.MarkBlockEntityDirty(barrel.Pos);
 
+            double elapsedCalendarDays = result.TotalHours / 24.0;
+
+            double averageAgingSpeed = elapsedCalendarDays > 0.0
+                ? result.AgeDays / elapsedCalendarDays
+                : 1.0;
+
+            double estimatedCalendarDaysToPeak = averageAgingSpeed > 0.0
+                ? result.SafeWindowDays / averageAgingSpeed
+                : result.SafeWindowDays;
+
             api.Logger.Notification(
-                "[Angel's Share] Finalized aging for {0}: sealedAt={1:F2}, unsealedAt={2:F2}, totalHours={3:F2}, ageDays={4:F2}, safeWindow={5:F2}, maturity={6:F3}, quality={7:F2}, intensity={8:F1}, smoothness={9:F1}, avgTemp={10:F1}, avgRain={11:F2}, trait={12}, tier={13}, special={14}",
+                "[Angel's Share] Finalized aging for {0}: sealedAt={1:F2}, unsealedAt={2:F2}, totalHours={3:F2}, elapsedCalendarDays={4:F2}, estimatedCalendarDaysToPeak={5:F2}, ageDays={6:F2}, safeWindow={7:F2}, maturity={8:F3}, quality={9:F2}, intensity={10:F1}, smoothness={11:F1}, avgTemp={12:F1}, avgRain={13:F2}, trait={14}, tier={15}, special={16}",
                 liquidStack.Collectible.Code,
                 sealedAtTotalHours,
                 nowTotalHours,
                 result.TotalHours,
                 result.AgeDays,
+                elapsedCalendarDays,
+                estimatedCalendarDaysToPeak,
                 result.SafeWindowDays,
                 result.MaturityRatio,
                 result.Quality,
@@ -212,7 +224,7 @@ namespace AngelsShare
                     TotalHours = 0.0,
                     AgeHours = 0.0,
                     AgeDays = 0.0,
-                    SafeWindowDays = 60.0,
+                    SafeWindowDays = 18.0,
                     MaturityRatio = 0.0,
                     OverAgeRatio = 0.0,
                     Quality = 0.0,
@@ -338,7 +350,14 @@ namespace AngelsShare
             );
 
             double proof = CalculateProofFromIntensity(intensity);
-            double ageStatementYears = CalculateAgeStatementYears(ageDays);
+            double ageStatementYears = CalculateAgeStatementYears(
+                ageDays,
+                safeWindowDays,
+                maturityRatio,
+                smoothness,
+                averageTemp,
+                averageRainfall
+            );
 
             return new AgingSnapshot
             {
@@ -367,29 +386,33 @@ namespace AngelsShare
 
         private static double GetSafeWindowDaysFromClimate(double averageTemp, double averageRainfall, CaskProfile profile)
         {
-            double safeWindowDays = 75.0;
+            // Singleplayer default:
+            // Hot/dry barrels peak quickly,
+            // Temperate barrels take a moderate amount of time,
+            // Cold/humid barrels remain slower
+            double safeWindowDays = 18.0;
 
             if (averageTemp > 20.0)
             {
-                safeWindowDays -= (averageTemp - 20.0) * 1.7;
+                safeWindowDays -= (averageTemp - 20.0) * 0.70;
             }
             else if (averageTemp < 20.0)
             {
-                safeWindowDays += (20.0 - averageTemp) * 0.45;
+                safeWindowDays += (20.0 - averageTemp) * 0.65;
             }
 
             if (averageRainfall > 0.65)
             {
-                safeWindowDays += 12.0;
+                safeWindowDays += 4.0 + ((averageRainfall - 0.5) * 10.0);
             }
             else if (averageRainfall < 0.30)
             {
-                safeWindowDays -= 12.0;
+                safeWindowDays -= 4.0 + ((0.30 - averageRainfall) * 8.0);
             }
 
             safeWindowDays *= profile.SafeWindowMultiplier;
 
-            return Clamp(safeWindowDays, 25.0, 220.0);
+            return Clamp(safeWindowDays, 6.0, 42.0);
         }
 
         private static double CalculateIntensity(double averageTemp, double averageRainfall, double maturityRatio, CaskProfile profile)
@@ -514,10 +537,17 @@ namespace AngelsShare
             if (tier != "reserve")
                 return "";
 
-            bool exceptionalBalance =
-                quality >= 88.0 &&
-                intensity >= 75.0 &&
-                smoothness >= 75.0;
+            bool unicornTrait = profile.Trait == "unicorn";
+            bool tightGrainTrait = profile.Trait == "tight-grain";
+
+            double ageStatementYears = CalculateAgeStatementYears(
+                ageDays,
+                safeWindowDays,
+                maturityRatio,
+                smoothness,
+                averageTemp,
+                averageRainfall
+            );
 
             bool caskStrengthCandidate =
                 quality >= 82.0 &&
@@ -526,36 +556,61 @@ namespace AngelsShare
                 (averageTemp >= 22.0 || averageRainfall <= 0.35);
 
             bool ageStatedCandidate =
-                quality >= 90.0 &&
-                smoothness >= 70.0 &&
-                maturityRatio >= 0.90 &&
-                ageDays >= 60.0;
+                quality >= 88.0 &&
+                smoothness >= 65.0 &&
+                maturityRatio >= 0.88 &&
+                ageStatementYears >= 8.0;
+
+            bool exceptionalBalance =
+                quality >= 92.0 &&
+                intensity >= 75.0 &&
+                smoothness >= 75.0;
 
             bool unicornAgeStatedCandidate =
-                quality >= 90.0 &&
+                ageStatedCandidate &&
+                quality >= 94.0 &&
                 smoothness >= 82.0 &&
-                safeWindowDays >= 115.0 &&
-                ageDays >= 100.0;
+                ageStatementYears >= 14.0 &&
+                (unicornTrait || tightGrainTrait || safeWindowDays >= 32.0);
 
-            bool unicornTrait = profile.Trait == "unicorn";
-            bool tightGrainTrait = profile.Trait == "tight-grain";
+            bool unicornCaskStrengthCandidate =
+                caskStrengthCandidate &&
+                quality >= 94.0 &&
+                intensity >= 90.0 &&
+                (unicornTrait || exceptionalBalance);
 
-            if (exceptionalBalance && (unicornTrait || caskStrengthCandidate))
-                return "Unicorn: Cask-Strength Reserve";
-
-            if (unicornAgeStatedCandidate && (unicornTrait || tightGrainTrait || safeWindowDays >= 130.0))
+            if (ageStatedCandidate && caskStrengthCandidate)
             {
-                int years = (int)CalculateAgeStatementYears(ageDays);
-                return "Unicorn: " + years + "-Year Old Reserve";
-            }
+                int years = (int)ageStatementYears;
 
-            if (caskStrengthCandidate)
-                return "Cask-Strength Reserve";
+                if (unicornAgeStatedCandidate || unicornCaskStrengthCandidate)
+                {
+                    return "Unicorn: " + years + "-Year Old Cask-Strength Reserve";
+                }
+
+                return years + "-Year Old Cask-Stregnth Reserve";
+            }
 
             if (ageStatedCandidate)
             {
-                int years = (int)CalculateAgeStatementYears(ageDays);
+                int years = (int)ageStatementYears;
+
+                if (unicornAgeStatedCandidate)
+                {
+                    return "Unicorn: " + years + "-Year Old Reserve";
+                }
+
                 return years + "-Year Old Reserve";
+            }
+
+            if (caskStrengthCandidate)
+            {
+                if (unicornCaskStrengthCandidate)
+                {
+                    return "Unicorn: Cask-Strength Reserve";
+                }
+                
+                return "Cask-Strength Reserve";
             }
 
             return "";
@@ -570,14 +625,40 @@ namespace AngelsShare
             return Clamp(proof, 120.0, 155.0);
         }
 
-        private static double CalculateAgeStatementYears(double ageDays)
+        private static double CalculateAgeStatementYears(
+            double ageDays,
+            double safeWindowDays,
+            double maturityRatio,
+            double smoothness,
+            double averageTemp,
+            double averageRainfall
+        )
         {
-            if (ageDays < 60.0)
-            {
+            if (safeWindowDays < 18.0)
                 return 0.0;
-            }
 
-            double years = 8.0 + ((ageDays - 60.0) / 10.0);
+            if (maturityRatio < 0.88)
+                return 0.0;
+
+            if (smoothness < 65.0)
+                return 0.0;
+
+            double slowWindowScore = Clamp((safeWindowDays - 18.0) / 24.0, 0.0, 1.0);
+            double smoothnessScore = Clamp((smoothness - 65.0) / 35.0, 0.0, 1.0);
+            double maturityScore = Clamp((maturityRatio - 0.88) / 0.17, 0.0, 1.0);
+
+            double coldBonus = Clamp((16.0 - averageTemp) / 18.0, 0.0, 1.0);
+            double humidBonus = Clamp((averageRainfall - 0.35) / 0.45, 0.0, 1.0);
+
+            double prestigeScore =
+                (slowWindowScore * 0.45) +
+                (smoothnessScore * 0.25) +
+                (maturityScore * 0.20) +
+                (coldBonus * 0.05) +
+                (humidBonus * 0.05);
+
+            // A minimum age statement of 8 years is applied
+            double years = 8.0 + (prestigeScore * 17.0);
 
             return Math.Min(25.0, Math.Floor(years));
         }
