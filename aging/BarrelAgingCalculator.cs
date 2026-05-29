@@ -557,7 +557,7 @@ namespace AngelsShare
 
             bool ageStatedCandidate =
                 quality >= 88.0 &&
-                smoothness >= 65.0 &&
+                smoothness >= 70.0 &&
                 maturityRatio >= 0.88 &&
                 ageStatementYears >= 8.0;
 
@@ -699,91 +699,91 @@ namespace AngelsShare
         {
             new CaskTraitRule
             {
-                UpperRoll = 0.005,
+                UpperRoll = 0.0005,
                 CreateProfile = rand => new CaskProfile
                 {
                     Trait = "flawed",
-                    CaskVariance = 0.85 + (rand.NextDouble() * 0.08),
-                    IntensityBonus = -12.0,
-                    SmoothnessBonus = -12.0,
-                    QualityBonus = -18.0,
+                    CaskVariance = 0.82 + (rand.NextDouble() * 0.10),
+                    IntensityBonus = -10.0,
+                    SmoothnessBonus = -14.0,
+                    QualityBonus = -22.0,
                     SafeWindowMultiplier = 0.90,
-                    OverOakResistance = 1.15
+                    OverOakResistance = 1.20
                 }
             },
 
             new CaskTraitRule
             {
-                UpperRoll = 0.025,
+                UpperRoll = 0.0205,
                 CreateProfile = rand => new CaskProfile
                 {
                     Trait = "unicorn",
-                    CaskVariance = 1.02 + (rand.NextDouble() * 0.16),
-                    IntensityBonus = 22.0,
-                    SmoothnessBonus = 22.0,
+                    CaskVariance = 1.00 + (rand.NextDouble() * 0.12),
+                    IntensityBonus = 24.0,
+                    SmoothnessBonus = 24.0,
                     QualityBonus = 14.0 + (rand.NextDouble() * 8.0),
-                    SafeWindowMultiplier = 1.12,
-                    OverOakResistance = 0.85,
+                    SafeWindowMultiplier = 1.22,
+                    OverOakResistance = 0.70,
                 }
             },
 
             new CaskTraitRule
             {
-                UpperRoll = 0.060,
+                UpperRoll = 0.0605,
                 CreateProfile = rand => new CaskProfile
                 {
                     Trait = "tight-grain",
-                    CaskVariance = 1.02 + (rand.NextDouble() * 0.16),
-                    IntensityBonus = 22.0,
+                    CaskVariance = 0.86 + (rand.NextDouble() * 0.12),
+                    IntensityBonus = -8.0,
                     SmoothnessBonus = 22.0,
-                    QualityBonus = 14.0 + (rand.NextDouble() * 8.0),
-                    SafeWindowMultiplier = 1.12,
-                    OverOakResistance = 0.85,
+                    QualityBonus = 6.0 + (rand.NextDouble() * 6.0),
+                    SafeWindowMultiplier = 1.35,
+                    OverOakResistance = 0.78,
                 }
             },
 
             new CaskTraitRule
             {
-                UpperRoll = 0.100,
+                UpperRoll = 0.1005,
                 CreateProfile = rand => new CaskProfile
                 {
                     Trait = "wide-grain",
-                    CaskVariance = 1.05 + (rand.NextDouble() * 0.14),
-                    IntensityBonus = 16.0,
-                    SmoothnessBonus = -4.0,
-                    QualityBonus = 2.0 + (rand.NextDouble() * 5.0),
-                    SafeWindowMultiplier = 0.85,
-                    OverOakResistance = 1.18,
+                    CaskVariance = 1.08 + (rand.NextDouble() * 0.14),
+                    IntensityBonus = 22.0,
+                    SmoothnessBonus = -8.0,
+                    QualityBonus = 4.0 + (rand.NextDouble() * 5.0),
+                    SafeWindowMultiplier = 0.82,
+                    OverOakResistance = 1.22,
                 }
             },
 
             new CaskTraitRule
             {
-                UpperRoll = 0.170,
+                UpperRoll = 0.2105,
                 CreateProfile = rand => new CaskProfile
                 {
                     Trait = "gentle",
-                    CaskVariance = 0.94 + (rand.NextDouble() * 0.12),
+                    CaskVariance = 0.92 + (rand.NextDouble() * 0.12),
                     IntensityBonus = -2.0,
-                    SmoothnessBonus = 16.0,
-                    QualityBonus = 4.0 + (rand.NextDouble() * 6.0),
-                    SafeWindowMultiplier = 1.08,
-                    OverOakResistance = 0.92,
+                    SmoothnessBonus = 14.0,
+                    QualityBonus = 3.0 + (rand.NextDouble() * 5.0),
+                    SafeWindowMultiplier = 1.10,
+                    OverOakResistance = 0.90,
                 }
             },
 
             new CaskTraitRule
             {
-                UpperRoll = 0.240,
+                UpperRoll = 0.3205,
                 CreateProfile = rand => new CaskProfile
                 {
                     Trait = "expressive",
-                    CaskVariance = 0.98 + (rand.NextDouble() * 0.14),
-                    IntensityBonus = 16.0,
-                    SmoothnessBonus = 0.0,
-                    QualityBonus = 4.0 + (rand.NextDouble() * 6.0),
-                    SafeWindowMultiplier = 1.0,
-                    OverOakResistance = 1.0,
+                    CaskVariance = 1.00 + (rand.NextDouble() * 0.12),
+                    IntensityBonus = 14.0,
+                    SmoothnessBonus = -1.0,
+                    QualityBonus = 3.0 + (rand.NextDouble() * 5.0),
+                    SafeWindowMultiplier = 0.98,
+                    OverOakResistance = 1.03,
                 }
             }
         };
@@ -793,10 +793,10 @@ namespace AngelsShare
             return new CaskProfile
             {
                 Trait = "standard",
-                CaskVariance = 0.92 + (rand.NextDouble() * 0.16),
+                CaskVariance = 0.94 + (rand.NextDouble() * 0.12),
                 IntensityBonus = 0.0,
                 SmoothnessBonus = 0.0,
-                QualityBonus = -2.0 + (rand.NextDouble() * 7.0),
+                QualityBonus = -3.0 + (rand.NextDouble() * 6.0),
                 SafeWindowMultiplier = 1.0,
                 OverOakResistance = 1.0,
             };
