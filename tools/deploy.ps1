@@ -27,4 +27,8 @@ if (Test-Path "$RepoRoot\modicon.png") {
 Write-Host "Building C# project..."
 dotnet build "$RepoRoot\AngelsShare.csproj" -c Debug
 
+if ($LASTEXITCODE -ne 0) {
+    throw "Build failed with exit code $LASTEXITCODE"
+}
+
 Write-Host "Deploy complete."

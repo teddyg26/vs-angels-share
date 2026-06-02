@@ -179,7 +179,7 @@ namespace AngelsShare
         {
             if (barrel.CurrentRecipe == null) return;
 
-            ItemStack outStack = barrel.CurrentRecipe.RecipeOutput.ResolvedItemStack;
+            ItemStack outStack = barrel.CurrentRecipe.Output.ResolvedItemstack;
             WaterTightContainableProps props = BlockLiquidContainerBase.GetContainableProps(outStack);
 
             if (props == null) return;
