@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 using Vintagestory.API.Common;
 using Vintagestory.API.Datastructures;
@@ -12,6 +13,25 @@ namespace AngelsShare
 {
     public static class BarrelAgingCalculator
     {
+        private const double ClimateSampleStepHours = 12.0;
+
+        private sealed class ProjectedAgingCacheEntry
+        {
+            public long HalfDayBucket { get; set; } = long.MinValue;
+            public double SealedAtTotalHours { get; set; }
+            public string LiquidCode { get; set; }
+            public int StackSize { get; set; }
+            public int PositionX { get; set; }
+            public int PositionY { get; set; }
+            public int PositionZ { get; set; }
+            public AgingSnapshot Snapshot { get; set; }
+        }
+
+        // Cache only live barrel instances. Entries disappear automatically when a
+        // barrel unloads, so projections never become part of saved item data.
+        private static readonly ConditionalWeakTable<BlockEntityBarrel, ProjectedAgingCacheEntry>
+            ProjectedAgingCache = new ConditionalWeakTable<BlockEntityBarrel, ProjectedAgingCacheEntry>();
+
         public static void InitializeAgingOnSeal(BlockEntityBarrel barrel, ItemSlot liquidSlot, ItemStack liquidStack)
         {
             if (barrel?.Api == null || liquidSlot?.Itemstack == null || liquidStack == null) return;
@@ -64,6 +84,8 @@ namespace AngelsShare
             tree.SetString("ageTier", "white");
             tree.SetString("specialStyle", "");
 
+            InvalidateProjectedAging(barrel);
+
             liquidSlot.MarkDirty();
             barrel.MarkDirty(true);
             api.World.BlockAccessor.MarkBlockEntityDirty(barrel.Pos);
@@ -111,6 +133,8 @@ namespace AngelsShare
 
             WriteAgingResultToTree(tree, result, nowTotalHours);
 
+            InvalidateProjectedAging(barrel);
+
             liquidSlot.MarkDirty();
             barrel.MarkDirty(true);
             api.World.BlockAccessor.MarkBlockEntityDirty(barrel.Pos);
@@ -154,15 +178,56 @@ namespace AngelsShare
             double nowTotalHours = barrel.Api.World.Calendar.ElapsedHours;
             double sealedAtTotalHours = tree.GetDouble("sealedAtTotalHours", nowTotalHours);
 
+            long halfDayBucket = (long)Math.Floor(nowTotalHours / ClimateSampleStepHours);
+            string liquidCode = liquidStack.Collectible?.Code?.ToString() ?? string.Empty;
+
+            ProjectedAgingCacheEntry cacheEntry = ProjectedAgingCache.GetValue(
+                barrel,
+                _ => new ProjectedAgingCacheEntry()
+            );
+
+            if (
+                cacheEntry.Snapshot != null &&
+                cacheEntry.HalfDayBucket == halfDayBucket &&
+                cacheEntry.SealedAtTotalHours == sealedAtTotalHours &&
+                cacheEntry.LiquidCode == liquidCode &&
+                cacheEntry.StackSize == liquidStack.StackSize &&
+                cacheEntry.PositionX == barrel.Pos.X &&
+                cacheEntry.PositionY == barrel.Pos.Y &&
+                cacheEntry.PositionZ == barrel.Pos.Z
+            )
+            {
+                return cacheEntry.Snapshot;
+            }
+
             CaskProfile profile = GetStoredCaskProfile(tree);
 
-            return CalculateIntegratedAging(
+            AgingSnapshot snapshot = CalculateIntegratedAging(
                 barrel,
                 liquidStack,
                 sealedAtTotalHours,
                 nowTotalHours,
                 profile
             );
+
+            cacheEntry.HalfDayBucket = halfDayBucket;
+            cacheEntry.SealedAtTotalHours = sealedAtTotalHours;
+            cacheEntry.LiquidCode = liquidCode;
+            cacheEntry.StackSize = liquidStack.StackSize;
+            cacheEntry.PositionX = barrel.Pos.X;
+            cacheEntry.PositionY = barrel.Pos.Y;
+            cacheEntry.PositionZ = barrel.Pos.Z;
+            cacheEntry.Snapshot = snapshot;
+
+            return snapshot;
+        }
+
+        private static void InvalidateProjectedAging(BlockEntityBarrel barrel)
+        {
+            if (barrel != null)
+            {
+                ProjectedAgingCache.Remove(barrel);
+            }
         }
 
         private static void WriteAgingResultToTree(ITreeAttribute tree, AgingSnapshot result, double nowTotalHours)
@@ -244,12 +309,10 @@ namespace AngelsShare
                 };
             }
 
-            double sampleStepHours = 24.0;
-
-            if (totalHours > 24.0 * 180.0)
-            {
-                sampleStepHours = 72.0;
-            }
+            // Sample at the midpoint of each half-day.  This keeps long-aging
+            // barrels sensitive to both the warmer and cooler parts of the day
+            // without reducing climate fidelity as their age increases.
+            const double sampleStepHours = ClimateSampleStepHours;
 
             double accumulatedAcceleratedHours = 0.0;
 
