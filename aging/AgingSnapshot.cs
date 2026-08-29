@@ -18,6 +18,8 @@ namespace AngelsShare
         public double Intensity { get; set; }
         public double Smoothness { get; set; }
         public double Balance { get; set; }
+        public double Extraction { get; set; }
+        public double Oak { get; set; }
 
         public double AverageTemperature { get; set; }
         public double AverageRainfall { get; set; }

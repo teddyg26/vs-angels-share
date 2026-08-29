@@ -5,7 +5,6 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 
 using Vintagestory.API.Common;
-using Vintagestory.API.Datastructures;
 using Vintagestory.API.MathTools;
 using Vintagestory.GameContent;
 
@@ -18,7 +17,7 @@ namespace AngelsShare
         private sealed class ProjectedAgingCacheEntry
         {
             public long HalfDayBucket { get; set; } = long.MinValue;
-            public double SealedAtTotalHours { get; set; }
+            public double SealedAtCalendarHours { get; set; }
             public string LiquidCode { get; set; }
             public int StackSize { get; set; }
             public int PositionX { get; set; }
@@ -37,9 +36,31 @@ namespace AngelsShare
             if (barrel?.Api == null || liquidSlot?.Itemstack == null || liquidStack == null) return;
 
             ICoreAPI api = barrel.Api;
-            ITreeAttribute tree = liquidStack.Attributes.GetOrAddTreeAttribute("maturationData");
+            MaturationRecord record;
 
-            if (tree.HasAttribute("sealedAtTotalHours")) return;
+            if (MaturationRecordCodec.TryRead(liquidStack, out record))
+            {
+                if (record.State == MaturationRecordState.Active && record.ActiveSession != null)
+                    return;
+            }
+            else
+            {
+                if (MaturationRecordCodec.HasStoredRecord(liquidStack))
+                {
+                    api.Logger.Error(
+                        "[Angel's Share] Refusing to overwrite unsupported maturation schema version {0} on {1}.",
+                        MaturationRecordCodec.GetStoredSchemaVersion(liquidStack),
+                        liquidStack.Collectible.Code
+                    );
+                    return;
+                }
+
+                record = new MaturationRecord
+                {
+                    SchemaVersion = MaturationSchema.CurrentVersion,
+                    Provenance = CreateInitialProvenance(liquidStack)
+                };
+            }
 
             double nowTotalHours = api.World.Calendar.ElapsedHours;
 
@@ -51,38 +72,34 @@ namespace AngelsShare
 
             CaskProfile profile = RollCaskProfile(barrel, liquidStack, nowTotalHours);
 
-            tree.SetDouble("sealedAtTotalHours", nowTotalHours);
-            tree.SetDouble("startingTemperature", currentTemp);
-            tree.SetDouble("startingRainfall", currentRainfall);
+            double volumeLitres = MaturationRecordCodec.GetStackVolumeLitres(liquidStack);
+            int sequence = record.CompletedSessions?.Count + 1 ?? 1;
 
-            tree.SetString("caskTrait", profile.Trait);
-            tree.SetDouble("caskVarianceSeed", profile.CaskVariance);
-            tree.SetDouble("caskIntensityBonus", profile.IntensityBonus);
-            tree.SetDouble("caskSmoothnessBonus", profile.SmoothnessBonus);
-            tree.SetDouble("caskQualityBonus", profile.QualityBonus);
-            tree.SetDouble("caskSafeWindowMultiplier", profile.SafeWindowMultiplier);
-            tree.SetDouble("caskOverOakResistance", profile.OverOakResistance);
+            record.State = MaturationRecordState.Active;
+            record.ActiveSession = new ActiveMaturationSession
+            {
+                Sequence = sequence,
+                InputLiquidCode = liquidStack.Collectible.Code.ToString(),
+                SealedAtCalendarHours = nowTotalHours,
+                LastIntegratedAtCalendarHours = nowTotalHours,
+                ActualElapsedHours = 0.0,
+                EffectiveMaturationHours = 0.0,
+                Climate = new ClimateAccumulators(),
+                Cask = ToStoredCaskProfile(profile),
+                Volume = new MaturationVolumeState
+                {
+                    StartingVolumeLitres = volumeLitres,
+                    CurrentVolumeLitres = volumeLitres,
+                    FractionalAngelsShareRemainderLitres =
+                        record.FinalizedProduct?.Volume?.FractionalAngelsShareRemainderLitres ?? 0.0
+                },
+                WhiskeyThief = new WhiskeyThiefState(),
+                ProjectedOutcome = MaturationRecordCodec.CreateOutcome(
+                    CreateEmptySnapshot(profile, currentTemp, currentRainfall)
+                )
+            };
 
-            tree.SetDouble("ageHours", 0.0);
-            tree.SetDouble("ageDays", 0.0);
-            tree.SetDouble("ageHoursTotal", 0.0);
-            tree.SetDouble("safeWindowDays", 18.0);
-            tree.SetDouble("maturityRatio", 0.0);
-            tree.SetDouble("overAgeRatio", 0.0);
-
-            tree.SetDouble("quality", 0.0);
-            tree.SetDouble("intensity", 0.0);
-            tree.SetDouble("smoothness", 0.0);
-            tree.SetDouble("balance", 0.0);
-
-            tree.SetDouble("averageTemperature", currentTemp);
-            tree.SetDouble("averageRainfall", currentRainfall);
-            tree.SetDouble("averageHumidityModifier", GetHumidityModifier(currentRainfall));
-
-            tree.SetString("climateStyle", GetClimateStyle(currentTemp, currentRainfall));
-            tree.SetString("maturationDescriptor", "Raw");
-            tree.SetString("ageTier", "white");
-            tree.SetString("specialStyle", "");
+            MaturationRecordCodec.Write(liquidStack, record);
 
             InvalidateProjectedAging(barrel);
 
@@ -106,32 +123,56 @@ namespace AngelsShare
             if (barrel?.Api == null || liquidSlot?.Itemstack == null || liquidStack == null) return;
 
             ICoreAPI api = barrel.Api;
-            ITreeAttribute tree = liquidStack.Attributes.GetOrAddTreeAttribute("maturationData");
 
-            if (!tree.HasAttribute("sealedAtTotalHours"))
+            if (
+                !MaturationRecordCodec.TryRead(liquidStack, out MaturationRecord record) ||
+                record.State != MaturationRecordState.Active ||
+                record.ActiveSession == null
+            )
             {
                 api.Logger.Warning(
-                    "[Angel's Share] Finalizing {0}, but no sealedAtTotalHours existed. Initializing late; previous sealed time cannot be recovered.",
+                    "[Angel's Share] Finalizing {0}, but no active maturation session existed. Initializing late; previous sealed time cannot be recovered.",
                     liquidStack.Collectible.Code
                 );
 
                 InitializeAgingOnSeal(barrel, liquidSlot, liquidStack);
+
+                if (!MaturationRecordCodec.TryRead(liquidStack, out record) || record.ActiveSession == null)
+                    return;
             }
 
             double nowTotalHours = api.World.Calendar.ElapsedHours;
-            double sealedAtTotalHours = tree.GetDouble("sealedAtTotalHours", nowTotalHours);
+            ActiveMaturationSession session = record.ActiveSession;
+            CaskProfile profile = FromStoredCaskProfile(session.Cask);
+            AgingSnapshot result = IntegrateAndCalculate(barrel, liquidStack, record, session, nowTotalHours);
+            session.ProjectedOutcome = MaturationRecordCodec.CreateOutcome(result);
 
-            CaskProfile profile = GetStoredCaskProfile(tree);
+            AssetLocation outputLocation;
+            string outputCode = BarrelAgingUtil.TryGetAgedOutputCode(liquidStack, out outputLocation)
+                ? outputLocation.ToString()
+                : liquidStack.Collectible.Code.ToString();
 
-            AgingSnapshot result = CalculateIntegratedAging(
-                barrel,
-                liquidStack,
-                sealedAtTotalHours,
-                nowTotalHours,
-                profile
-            );
+            CompletedMaturationSession completed = new CompletedMaturationSession
+            {
+                Sequence = session.Sequence,
+                InputLiquidCode = session.InputLiquidCode,
+                OutputLiquidCode = outputCode,
+                SealedAtCalendarHours = session.SealedAtCalendarHours,
+                UnsealedAtCalendarHours = nowTotalHours,
+                ActualElapsedHours = session.ActualElapsedHours,
+                EffectiveMaturationHours = session.EffectiveMaturationHours,
+                Climate = MaturationRecordCodec.CloneClimate(session.Climate),
+                Cask = MaturationRecordCodec.CloneCask(session.Cask),
+                Volume = MaturationRecordCodec.CloneVolume(session.Volume),
+                WhiskeyThief = MaturationRecordCodec.CloneWhiskeyThief(session.WhiskeyThief),
+                Outcome = MaturationRecordCodec.CloneOutcome(session.ProjectedOutcome)
+            };
 
-            WriteAgingResultToTree(tree, result, nowTotalHours);
+            record.CompletedSessions.Add(completed);
+            record.FinalizedProduct = CreateFinalizedProduct(record, session, result, outputCode, nowTotalHours);
+            record.ActiveSession = null;
+            record.State = MaturationRecordState.Finalized;
+            MaturationRecordCodec.Write(liquidStack, record);
 
             InvalidateProjectedAging(barrel);
 
@@ -152,12 +193,12 @@ namespace AngelsShare
             api.Logger.Notification(
                 "[Angel's Share] Finalized aging for {0}: sealedAt={1:F2}, unsealedAt={2:F2}, totalHours={3:F2}, elapsedCalendarDays={4:F2}, estimatedCalendarDaysToPeak={5:F2}, ageDays={6:F2}, safeWindow={7:F2}, maturity={8:F3}, quality={9:F2}, intensity={10:F1}, smoothness={11:F1}, avgTemp={12:F1}, avgRain={13:F2}, trait={14}, tier={15}, special={16}",
                 liquidStack.Collectible.Code,
-                sealedAtTotalHours,
+                session.SealedAtCalendarHours,
                 nowTotalHours,
                 result.TotalHours,
-                result.AgeDays,
                 elapsedCalendarDays,
                 estimatedCalendarDaysToPeak,
+                result.AgeDays,
                 result.SafeWindowDays,
                 result.MaturityRatio,
                 result.Quality,
@@ -173,10 +214,18 @@ namespace AngelsShare
 
         public static AgingSnapshot GetProjectedAging(BlockEntityBarrel barrel, ItemStack liquidStack)
         {
-            ITreeAttribute tree = liquidStack.Attributes.GetOrAddTreeAttribute("maturationData");
+            if (
+                barrel?.Api == null ||
+                !MaturationRecordCodec.TryRead(liquidStack, out MaturationRecord record) ||
+                record.State != MaturationRecordState.Active ||
+                record.ActiveSession == null
+            )
+            {
+                return null;
+            }
 
             double nowTotalHours = barrel.Api.World.Calendar.ElapsedHours;
-            double sealedAtTotalHours = tree.GetDouble("sealedAtTotalHours", nowTotalHours);
+            double sealedAtTotalHours = record.ActiveSession.SealedAtCalendarHours;
 
             long halfDayBucket = (long)Math.Floor(nowTotalHours / ClimateSampleStepHours);
             string liquidCode = liquidStack.Collectible?.Code?.ToString() ?? string.Empty;
@@ -189,7 +238,7 @@ namespace AngelsShare
             if (
                 cacheEntry.Snapshot != null &&
                 cacheEntry.HalfDayBucket == halfDayBucket &&
-                cacheEntry.SealedAtTotalHours == sealedAtTotalHours &&
+                cacheEntry.SealedAtCalendarHours == sealedAtTotalHours &&
                 cacheEntry.LiquidCode == liquidCode &&
                 cacheEntry.StackSize == liquidStack.StackSize &&
                 cacheEntry.PositionX == barrel.Pos.X &&
@@ -200,18 +249,26 @@ namespace AngelsShare
                 return cacheEntry.Snapshot;
             }
 
-            CaskProfile profile = GetStoredCaskProfile(tree);
-
-            AgingSnapshot snapshot = CalculateIntegratedAging(
+            AgingSnapshot snapshot = IntegrateAndCalculate(
                 barrel,
                 liquidStack,
-                sealedAtTotalHours,
-                nowTotalHours,
-                profile
+                record,
+                record.ActiveSession,
+                nowTotalHours
             );
 
+            record.ActiveSession.ProjectedOutcome = MaturationRecordCodec.CreateOutcome(snapshot);
+
+            if (barrel.Api.Side == EnumAppSide.Server)
+            {
+                MaturationRecordCodec.Write(liquidStack, record);
+                ItemSlot liquidSlot = barrel.Inventory[BarrelAgingUtil.LiquidSlotId];
+                liquidSlot?.MarkDirty();
+                barrel.MarkDirty(true);
+            }
+
             cacheEntry.HalfDayBucket = halfDayBucket;
-            cacheEntry.SealedAtTotalHours = sealedAtTotalHours;
+            cacheEntry.SealedAtCalendarHours = sealedAtTotalHours;
             cacheEntry.LiquidCode = liquidCode;
             cacheEntry.StackSize = liquidStack.StackSize;
             cacheEntry.PositionX = barrel.Pos.X;
@@ -230,36 +287,6 @@ namespace AngelsShare
             }
         }
 
-        private static void WriteAgingResultToTree(ITreeAttribute tree, AgingSnapshot result, double nowTotalHours)
-        {
-            tree.SetDouble("ageHours", result.AgeHours);
-            tree.SetDouble("ageDays", result.AgeDays);
-            tree.SetDouble("ageHoursTotal", result.TotalHours);
-
-            tree.SetDouble("safeWindowDays", result.SafeWindowDays);
-            tree.SetDouble("maturityRatio", result.MaturityRatio);
-            tree.SetDouble("overAgeRatio", result.OverAgeRatio);
-
-            tree.SetDouble("quality", result.Quality);
-            tree.SetDouble("intensity", result.Intensity);
-            tree.SetDouble("smoothness", result.Smoothness);
-            tree.SetDouble("balance", result.Balance);
-
-            tree.SetDouble("averageTemperature", result.AverageTemperature);
-            tree.SetDouble("averageRainfall", result.AverageRainfall);
-            tree.SetDouble("averageHumidityModifier", result.AverageHumidityModifier);
-
-            tree.SetString("climateStyle", result.ClimateStyle);
-            tree.SetString("maturationDescriptor", result.MaturationDescriptor);
-            tree.SetString("ageTier", result.Tier);
-            tree.SetString("specialStyle", result.SpecialStyle);
-
-            tree.SetDouble("proof", result.Proof);
-            tree.SetDouble("ageStatementYears", result.AgeStatementYears);
-
-            tree.SetDouble("unsealedAtTotalHours", nowTotalHours);
-        }
-
         private static double GetTemperatureSpeedMultiplier(double temp)
         {
             // Cold climates should age slower, but not become inert.
@@ -269,108 +296,86 @@ namespace AngelsShare
             return Clamp(raw, 1.00, 1.80);
         }
 
-        private static AgingSnapshot CalculateIntegratedAging(
+        private static AgingSnapshot IntegrateAndCalculate(
             BlockEntityBarrel barrel,
             ItemStack liquidStack,
-            double sealedAtTotalHours,
-            double unsealedAtTotalHours,
-            CaskProfile profile
+            MaturationRecord record,
+            ActiveMaturationSession session,
+            double throughCalendarHours
         )
         {
             ICoreAPI api = barrel.Api;
             BlockPos pos = barrel.Pos;
+            CaskProfile profile = FromStoredCaskProfile(session.Cask);
 
-            double totalHours = Math.Max(0.0, unsealedAtTotalHours - sealedAtTotalHours);
+            session.Climate ??= new ClimateAccumulators();
+            session.Volume ??= new MaturationVolumeState();
 
-            if (totalHours <= 0.0)
+            double cursor = Math.Max(
+                session.SealedAtCalendarHours,
+                session.LastIntegratedAtCalendarHours
+            );
+
+            if (cursor > throughCalendarHours)
+                cursor = throughCalendarHours;
+
+            while (cursor < throughCalendarHours)
             {
-                return new AgingSnapshot
-                {
-                    TotalHours = 0.0,
-                    AgeHours = 0.0,
-                    AgeDays = 0.0,
-                    SafeWindowDays = 18.0,
-                    MaturityRatio = 0.0,
-                    OverAgeRatio = 0.0,
-                    Quality = 0.0,
-                    Intensity = 0.0,
-                    Smoothness = 0.0,
-                    Balance = 0.0,
-                    AverageTemperature = 20.0,
-                    AverageRainfall = 0.5,
-                    AverageHumidityModifier = 1.0,
-                    ClimateStyle = "Standard Continental Maturation",
-                    MaturationDescriptor = "Raw",
-                    CaskTrait = profile.Trait,
-                    Tier = "white",
-                    SpecialStyle = "",
-                    Proof = 0.0,
-                    AgeStatementYears = 0.0
-                };
-            }
-
-            // Sample at the midpoint of each half-day.  This keeps long-aging
-            // barrels sensitive to both the warmer and cooler parts of the day
-            // without reducing climate fidelity as their age increases.
-            const double sampleStepHours = ClimateSampleStepHours;
-
-            double accumulatedAcceleratedHours = 0.0;
-
-            double accumulatedTemperature = 0.0;
-            double accumulatedRainfall = 0.0;
-            double accumulatedHumidityModifier = 0.0;
-            double accumulatedWeightedHours = 0.0;
-
-            double cursor = sealedAtTotalHours;
-
-            while (cursor < unsealedAtTotalHours)
-            {
-                double next = Math.Min(cursor + sampleStepHours, unsealedAtTotalHours);
+                double next = Math.Min(cursor + ClimateSampleStepHours, throughCalendarHours);
                 double chunkHours = next - cursor;
-
-                if (chunkHours <= 0.0)
-                {
-                    break;
-                }
+                if (chunkHours <= 0.0) break;
 
                 double sampleHour = cursor + (chunkHours / 2.0);
                 AgingClimateSample sample = GetClimateSampleAtWorldHour(api, pos, sampleHour);
-
                 float temp = sample.Temperature;
                 float rainfall = sample.Rainfall;
-
                 double humidityModifier = GetHumidityModifier(rainfall);
-
-                double tempSpeedMultiplier = GetTemperatureSpeedMultiplier(temp);
-
-                double chunkAcceleratedHours =
-                    chunkHours
-                    * tempSpeedMultiplier
+                double maturationRate =
+                    GetTemperatureSpeedMultiplier(temp)
                     * humidityModifier
                     * profile.CaskVariance;
+                double effectiveHours = chunkHours * maturationRate;
 
-                accumulatedAcceleratedHours += chunkAcceleratedHours;
-
-                accumulatedTemperature += temp * chunkHours;
-                accumulatedRainfall += rainfall * chunkHours;
-                accumulatedHumidityModifier += humidityModifier * chunkHours;
-                accumulatedWeightedHours += chunkHours;
+                session.EffectiveMaturationHours += effectiveHours;
+                session.Climate.ObservedHours += chunkHours;
+                session.Climate.TemperatureHourIntegral += temp * chunkHours;
+                session.Climate.RainfallHourIntegral += rainfall * chunkHours;
+                session.Climate.HumidityModifierHourIntegral += humidityModifier * chunkHours;
+                session.Climate.MaturationRateHourIntegral += effectiveHours;
+                session.Climate.SampleCount++;
 
                 cursor = next;
             }
 
+            session.LastIntegratedAtCalendarHours = throughCalendarHours;
+            session.ActualElapsedHours = Math.Max(
+                0.0,
+                throughCalendarHours - session.SealedAtCalendarHours
+            );
+            session.Volume.CurrentVolumeLitres = MaturationRecordCodec.GetStackVolumeLitres(liquidStack);
+
+            FinalizedMaturationProduct prior = record.FinalizedProduct;
+            double totalHours = (prior?.TotalActualElapsedHours ?? 0.0) + session.ActualElapsedHours;
+            double accumulatedAcceleratedHours =
+                (prior?.TotalEffectiveMaturationHours ?? 0.0)
+                + session.EffectiveMaturationHours;
+
+            ClimateAccumulators aggregateClimate = prior == null
+                ? MaturationRecordCodec.CloneClimate(session.Climate)
+                : MergeClimate(prior.Climate, session.Climate);
+
+            if (totalHours <= 0.0)
+                return CreateEmptySnapshot(profile, 20.0, 0.5);
+
             double ageDays = accumulatedAcceleratedHours / 24.0;
-
-            double averageTemp = accumulatedWeightedHours > 0.0
-                ? accumulatedTemperature / accumulatedWeightedHours
+            double averageTemp = aggregateClimate.ObservedHours > 0.0
+                ? aggregateClimate.TemperatureHourIntegral / aggregateClimate.ObservedHours
                 : 20.0;
-
-            double averageRainfall = accumulatedWeightedHours > 0.0
-                ? accumulatedRainfall / accumulatedWeightedHours
+            double averageRainfall = aggregateClimate.ObservedHours > 0.0
+                ? aggregateClimate.RainfallHourIntegral / aggregateClimate.ObservedHours
                 : 0.5;
-
-            double averageHumidityModifier = accumulatedWeightedHours > 0.0
-                ? accumulatedHumidityModifier / accumulatedWeightedHours
+            double averageHumidityModifier = aggregateClimate.ObservedHours > 0.0
+                ? aggregateClimate.HumidityModifierHourIntegral / aggregateClimate.ObservedHours
                 : 1.0;
 
             double safeWindowDays = GetSafeWindowDaysFromClimate(averageTemp, averageRainfall, profile);
@@ -434,6 +439,8 @@ namespace AngelsShare
                 Intensity = intensity,
                 Smoothness = smoothness,
                 Balance = balance,
+                Extraction = Clamp(maturityRatio * 100.0, 0.0, 100.0),
+                Oak = Clamp((overAgeRatio / 0.12) * 100.0, 0.0, 100.0),
                 AverageTemperature = averageTemp,
                 AverageRainfall = averageRainfall,
                 AverageHumidityModifier = averageHumidityModifier,
@@ -444,6 +451,182 @@ namespace AngelsShare
                 SpecialStyle = specialStyle,
                 Proof = proof,
                 AgeStatementYears = ageStatementYears
+            };
+        }
+
+        private static AgingSnapshot CreateEmptySnapshot(
+            CaskProfile profile,
+            double temperature,
+            double rainfall
+        )
+        {
+            return new AgingSnapshot
+            {
+                TotalHours = 0.0,
+                AgeHours = 0.0,
+                AgeDays = 0.0,
+                SafeWindowDays = 18.0,
+                MaturityRatio = 0.0,
+                OverAgeRatio = 0.0,
+                Quality = 0.0,
+                Intensity = 0.0,
+                Smoothness = 0.0,
+                Balance = 0.0,
+                Extraction = 0.0,
+                Oak = 0.0,
+                AverageTemperature = temperature,
+                AverageRainfall = rainfall,
+                AverageHumidityModifier = GetHumidityModifier((float)rainfall),
+                ClimateStyle = GetClimateStyle(temperature, rainfall),
+                MaturationDescriptor = "Raw",
+                CaskTrait = profile?.Trait ?? "standard",
+                Tier = "white",
+                SpecialStyle = string.Empty,
+                Proof = 0.0,
+                AgeStatementYears = 0.0
+            };
+        }
+
+        private static DistillationProvenance CreateInitialProvenance(ItemStack liquidStack)
+        {
+            string code = liquidStack?.Collectible?.Code?.ToString() ?? string.Empty;
+
+            return new DistillationProvenance
+            {
+                MethodCode = "angels-share:legacy-still",
+                SourceLiquidCode = string.Empty,
+                DistilledSpiritCode = code,
+                DistillationPasses = 1
+            };
+        }
+
+        private static FinalizedMaturationProduct CreateFinalizedProduct(
+            MaturationRecord record,
+            ActiveMaturationSession session,
+            AgingSnapshot result,
+            string outputCode,
+            double finalizedAtCalendarHours
+        )
+        {
+            FinalizedMaturationProduct prior = record.FinalizedProduct;
+            MaturationVolumeState volume = new MaturationVolumeState
+            {
+                StartingVolumeLitres = prior?.Volume?.StartingVolumeLitres > 0.0
+                    ? prior.Volume.StartingVolumeLitres
+                    : session.Volume.StartingVolumeLitres,
+                CurrentVolumeLitres = session.Volume.CurrentVolumeLitres,
+                AngelsShareLostLitres =
+                    (prior?.Volume?.AngelsShareLostLitres ?? 0.0)
+                    + session.Volume.AngelsShareLostLitres,
+                WhiskeyThiefSampledLitres =
+                    (prior?.Volume?.WhiskeyThiefSampledLitres ?? 0.0)
+                    + session.Volume.WhiskeyThiefSampledLitres,
+                OtherLossLitres =
+                    (prior?.Volume?.OtherLossLitres ?? 0.0)
+                    + session.Volume.OtherLossLitres,
+                FractionalAngelsShareRemainderLitres =
+                    session.Volume.FractionalAngelsShareRemainderLitres
+            };
+
+            return new FinalizedMaturationProduct
+            {
+                ProductLiquidCode = outputCode,
+                FinalizedAtCalendarHours = finalizedAtCalendarHours,
+                CompletedSessionCount = record.CompletedSessions.Count,
+                TotalActualElapsedHours = result.TotalHours,
+                TotalEffectiveMaturationHours = result.AgeHours,
+                Climate = prior == null
+                    ? MaturationRecordCodec.CloneClimate(session.Climate)
+                    : MergeClimate(prior.Climate, session.Climate),
+                Volume = volume,
+                WhiskeyThief = MergeWhiskeyThief(prior?.WhiskeyThief, session.WhiskeyThief),
+                Outcome = MaturationRecordCodec.CreateOutcome(result)
+            };
+        }
+
+        private static ClimateAccumulators MergeClimate(
+            ClimateAccumulators first,
+            ClimateAccumulators second
+        )
+        {
+            first ??= new ClimateAccumulators();
+            second ??= new ClimateAccumulators();
+
+            return new ClimateAccumulators
+            {
+                ObservedHours = first.ObservedHours + second.ObservedHours,
+                TemperatureHourIntegral =
+                    first.TemperatureHourIntegral + second.TemperatureHourIntegral,
+                RainfallHourIntegral = first.RainfallHourIntegral + second.RainfallHourIntegral,
+                HumidityModifierHourIntegral =
+                    first.HumidityModifierHourIntegral + second.HumidityModifierHourIntegral,
+                MaturationRateHourIntegral =
+                    first.MaturationRateHourIntegral + second.MaturationRateHourIntegral,
+                EvaporationRateHourIntegral =
+                    first.EvaporationRateHourIntegral + second.EvaporationRateHourIntegral,
+                SampleCount = first.SampleCount + second.SampleCount
+            };
+        }
+
+        private static WhiskeyThiefState MergeWhiskeyThief(
+            WhiskeyThiefState first,
+            WhiskeyThiefState second
+        )
+        {
+            first ??= new WhiskeyThiefState();
+            second ??= new WhiskeyThiefState();
+
+            return new WhiskeyThiefState
+            {
+                SampleCount = first.SampleCount + second.SampleCount,
+                Exposure = first.Exposure + second.Exposure,
+                LastSampledAtCalendarHours = second.LastSampledAtCalendarHours
+                    ?? first.LastSampledAtCalendarHours
+            };
+        }
+
+        private static MaturationCaskProfile ToStoredCaskProfile(CaskProfile profile)
+        {
+            profile ??= new CaskProfile { Trait = "standard", CaskVariance = 1.0 };
+
+            return new MaturationCaskProfile
+            {
+                ProfileCode = "angels-share:" + (profile.Trait ?? "standard"),
+                RollSeed = profile.RollSeed,
+                MaturationRateMultiplier = profile.CaskVariance,
+                IntensityBonus = profile.IntensityBonus,
+                SmoothnessBonus = profile.SmoothnessBonus,
+                QualityBonus = profile.QualityBonus,
+                ExtractionMultiplier = 1.0,
+                SafeWindowMultiplier = profile.SafeWindowMultiplier,
+                OverOakResistance = profile.OverOakResistance
+            };
+        }
+
+        private static CaskProfile FromStoredCaskProfile(MaturationCaskProfile stored)
+        {
+            stored ??= new MaturationCaskProfile();
+            string trait = stored.ProfileCode ?? "standard";
+            int separator = trait.IndexOf(':');
+            if (separator >= 0 && separator < trait.Length - 1)
+                trait = trait.Substring(separator + 1);
+
+            return new CaskProfile
+            {
+                RollSeed = stored.RollSeed,
+                Trait = trait,
+                CaskVariance = stored.MaturationRateMultiplier > 0.0
+                    ? stored.MaturationRateMultiplier
+                    : 1.0,
+                IntensityBonus = stored.IntensityBonus,
+                SmoothnessBonus = stored.SmoothnessBonus,
+                QualityBonus = stored.QualityBonus,
+                SafeWindowMultiplier = stored.SafeWindowMultiplier > 0.0
+                    ? stored.SafeWindowMultiplier
+                    : 1.0,
+                OverOakResistance = stored.OverOakResistance > 0.0
+                    ? stored.OverOakResistance
+                    : 1.0
             };
         }
 
@@ -651,7 +834,7 @@ namespace AngelsShare
                     return "Unicorn: " + years + "-Year Old Cask-Strength Reserve";
                 }
 
-                return years + "-Year Old Cask-Stregnth Reserve";
+                return years + "-Year Old Cask-Strength Reserve";
             }
 
             if (ageStatedCandidate)
@@ -877,24 +1060,14 @@ namespace AngelsShare
 
             if (selectedRule != null)
             {
-                return selectedRule.CreateProfile(rand);
+                CaskProfile selected = selectedRule.CreateProfile(rand);
+                selected.RollSeed = seed;
+                return selected;
             }
 
-            return CreateStandardCaskProfile(rand);
-        }
-
-        private static CaskProfile GetStoredCaskProfile(ITreeAttribute tree)
-        {
-            return new CaskProfile
-            {
-                Trait = tree.GetString("caskTrait", "standard"),
-                CaskVariance = tree.GetDouble("caskVarianceSeed", 1.0),
-                IntensityBonus = tree.GetDouble("caskIntensityBonus", 0.0),
-                SmoothnessBonus = tree.GetDouble("caskSmoothnessBonus", 0.0),
-                QualityBonus = tree.GetDouble("caskQualityBonus", 0.0),
-                SafeWindowMultiplier = tree.GetDouble("caskSafeWindowMultiplier", 1.0),
-                OverOakResistance = tree.GetDouble("caskOverOakResistance", 1.0)
-            };
+            CaskProfile standard = CreateStandardCaskProfile(rand);
+            standard.RollSeed = seed;
+            return standard;
         }
 
         private static int MakeCaskSeed(BlockEntityBarrel barrel, ItemStack liquidStack, double sealedAtTotalHours)

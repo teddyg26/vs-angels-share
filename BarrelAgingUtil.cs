@@ -1,6 +1,5 @@
 ﻿using System;
 using Vintagestory.API.Common;
-using Vintagestory.API.Datastructures;
 
 namespace AngelsShare
 {
@@ -71,34 +70,47 @@ namespace AngelsShare
                 newStack.Attributes = oldStack.Attributes.Clone();
             }
 
-            ITreeAttribute maturationTree = newStack.Attributes.GetOrAddTreeAttribute("maturationData");
+            if (!MaturationRecordCodec.TryRead(newStack, out MaturationRecord record))
+            {
+                api.Logger.Warning(
+                    "[Angel's Share] Converted {0}, but its maturation record could not be read.",
+                    oldStack.Collectible.Code
+                );
+                return false;
+            }
 
-            double quality = maturationTree.GetDouble("quality", 0.0);
-            double intensity = maturationTree.GetDouble("intensity", 0.0);
-            double smoothness = maturationTree.GetDouble("smoothness", 0.0);
-            double maturityRatio = maturationTree.GetDouble("maturityRatio", 0.0);
+            if (record.FinalizedProduct == null)
+            {
+                api.Logger.Warning(
+                    "[Angel's Share] Refusing to convert {0}: maturation was not finalized.",
+                    oldStack.Collectible.Code
+                );
+                return false;
+            }
 
-            string tier = maturationTree.GetString(
-                "ageTier",
-                GetAgeTierFromMaturity(oldStack, maturityRatio, quality, intensity, smoothness)
-            );
+            record.FinalizedProduct.ProductLiquidCode = outputCode.ToString();
 
-            maturationTree.SetString("agedFrom", oldStack.Collectible.Code.ToString());
-            maturationTree.SetString("agedInto", outputCode.ToString());
-            maturationTree.SetBool("angelsshareAged", true);
-            maturationTree.SetString("ageTier", tier);
+            if (record.CompletedSessions.Count > 0)
+            {
+                record.CompletedSessions[record.CompletedSessions.Count - 1].OutputLiquidCode =
+                    outputCode.ToString();
+            }
+
+            MaturationRecordCodec.Write(newStack, record);
+
+            MaturationOutcome outcome = record.FinalizedProduct.Outcome;
+            double effectiveDays = record.FinalizedProduct.TotalEffectiveMaturationHours / 24.0;
 
             api.Logger.Notification(
-                "[Angel's Share] Converted {0} -> {1}, ageDays={2:F2}, maturity={3:F3}, quality={4:F2}, intensity={5:F1}, smoothness={6:F1}, tier={7}, special={8}, newClass={9}",
+                "[Angel's Share] Converted {0} -> {1}, effectiveDays={2:F2}, quality={3:F2}, intensity={4:F1}, smoothness={5:F1}, tier={6}, designations={7}, newClass={8}",
                 oldStack.Collectible.Code,
                 outputCode,
-                maturationTree.GetDouble("ageDays", 0.0),
-                maturityRatio,
-                quality,
-                intensity,
-                smoothness,
-                tier,
-                maturationTree.GetString("specialStyle", ""),
+                effectiveDays,
+                outcome?.Quality ?? 0.0,
+                outcome?.Intensity ?? 0.0,
+                outcome?.Smoothness ?? 0.0,
+                outcome?.TierCode ?? "unknown",
+                AgingDisplayUtil.GetDesignationSummary(outcome),
                 newStack.Collectible.GetType().FullName
             );
 

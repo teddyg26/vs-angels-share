@@ -1,7 +1,6 @@
 ﻿using AngelsShare;
 using HarmonyLib;
 using Vintagestory.API.Common;
-using Vintagestory.API.Datastructures;
 using Vintagestory.GameContent;
 
 namespace AngelsShare
@@ -45,19 +44,22 @@ namespace AngelsShare
 
             BarrelAgingCalculator.FinalizeAgingOnUnseal(barrel, liquidSlot, liquidStack);
 
-            ITreeAttribute oldTree = liquidStack.Attributes?.GetTreeAttribute("maturationData");
+            AgingDisplayUtil.TryGetMaturationRecord(liquidStack, out MaturationRecord record);
+            FinalizedMaturationProduct product = record?.FinalizedProduct;
+            MaturationOutcome outcome = product?.Outcome;
 
             barrel.Api.Logger.Notification(
-                "[Angel's Share] Before conversion: stack={0}, hasTree={1}, ageDays={2:F2}, quality={3:F2}, intensity={4:F1}, smoothness={5:F1}, maturity={6:F3}, tier={7}, special={8}",
+                "[Angel's Share] Before conversion: stack={0}, schemaVersion={1}, state={2}, effectiveDays={3:F2}, actualDays={4:F2}, quality={5:F2}, intensity={6:F1}, smoothness={7:F1}, tier={8}, designations={9}",
                 liquidStack.Collectible.Code,
-                oldTree != null,
-                oldTree?.GetDouble("ageDays", 0.0) ?? -1,
-                oldTree?.GetDouble("quality", 0.0) ?? -1,
-                oldTree?.GetDouble("intensity", 0.0) ?? -1,
-                oldTree?.GetDouble("smoothness", 0.0) ?? -1,
-                oldTree?.GetDouble("maturityRatio", 0.0) ?? -1,
-                oldTree?.GetString("ageTier", "missing") ?? "missing",
-                oldTree?.GetString("specialStyle", "") ?? ""
+                record?.SchemaVersion ?? 0,
+                record?.State.ToString() ?? "missing",
+                (product?.TotalEffectiveMaturationHours ?? 0.0) / 24.0,
+                (product?.TotalActualElapsedHours ?? 0.0) / 24.0,
+                outcome?.Quality ?? -1.0,
+                outcome?.Intensity ?? -1.0,
+                outcome?.Smoothness ?? -1.0,
+                outcome?.TierCode ?? "missing",
+                AgingDisplayUtil.GetDesignationSummary(outcome)
             );
 
             bool converted = BarrelAgingUtil.ConvertAgingSpiritOnUnseal(barrel.Api, liquidSlot);

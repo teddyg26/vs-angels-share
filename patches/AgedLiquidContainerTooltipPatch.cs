@@ -2,7 +2,6 @@
 using System.Text;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
-using Vintagestory.API.Datastructures;
 using Vintagestory.GameContent;
 
 namespace AngelsShare
@@ -24,29 +23,33 @@ namespace AngelsShare
 
             if (liquidStack == null) return;
 
-            ITreeAttribute tree = AgingDisplayUtil.GetMaturationTree(liquidStack);
-
-            if (!AgingDisplayUtil.HasFinalizedAgingData(tree))
+            if (
+                !AgingDisplayUtil.TryGetMaturationRecord(
+                    liquidStack,
+                    out MaturationRecord record
+                ) ||
+                !AgingDisplayUtil.HasFinalizedAgingData(record)
+            )
                 return;
 
             if (dsc.ToString().Contains("[Angel's Share")) return;
 
             dsc.AppendLine();
-            dsc.AppendLine(AgingDisplayUtil.GetAgedSpiritDisplayName(liquidStack, tree));
+            dsc.AppendLine(AgingDisplayUtil.GetAgedSpiritDisplayName(liquidStack, record));
 
             bool shiftDown = IsShiftDown(inSlot);
 
             if (shiftDown)
             {
-                AgingDisplayUtil.AppendFinalizedDetailed(dsc, tree);
+                AgingDisplayUtil.AppendFinalizedDetailed(dsc, record);
             }
             else
             {
-                AgingDisplayUtil.AppendFinalizedShort(dsc, tree);
+                AgingDisplayUtil.AppendFinalizedShort(dsc, record);
             }
 
             if (withDebugInfo)
-                AgingDisplayUtil.AppendDebug(dsc, tree);
+                AgingDisplayUtil.AppendDebug(dsc, record);
         }
 
         private static bool IsShiftDown(ItemSlot slot)

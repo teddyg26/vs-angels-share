@@ -7,7 +7,6 @@ using System.Linq;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
-using Vintagestory.API.Datastructures;
 using Vintagestory.API.MathTools;
 using Vintagestory.GameContent;
 
@@ -37,23 +36,25 @@ namespace AngelsShare
                     return;
 
                 ItemStack liquidStack = liquidSlot.Itemstack;
-                ITreeAttribute tree = AgingDisplayUtil.GetMaturationTree(liquidStack);
-
-                if (tree == null)
+                if (!AgingDisplayUtil.TryGetMaturationRecord(
+                    liquidStack,
+                    out MaturationRecord record
+                ))
                     return;
 
-                if (!AgingDisplayUtil.HasFinalizedAgingData(tree))
-                    return;
-
-                if (barrel.Sealed && BarrelAgingUtil.IsAgeableSpirit(liquidStack))
+                if (
+                    barrel.Sealed &&
+                    BarrelAgingUtil.IsAgeableSpirit(liquidStack) &&
+                    record.ActiveSession != null
+                )
                 {
                     TryReplaceDummyRecipeText(barrel, ref __result);
                     AppendProjectedAgingText(barrel, liquidStack, ref __result);
                     return;
                 }
 
-                if (tree != null && AgingDisplayUtil.HasFinalizedAgingData(tree))
-                    AppendFinalizedAgingText(tree, ref __result);
+                if (AgingDisplayUtil.HasFinalizedAgingData(record))
+                    AppendFinalizedAgingText(record, ref __result);
             }
             catch
             {
@@ -220,10 +221,10 @@ namespace AngelsShare
             text = text.TrimEnd() + "\n" + extra.ToString();
         }
 
-        private static void AppendFinalizedAgingText(ITreeAttribute tree, ref string text)
+        private static void AppendFinalizedAgingText(MaturationRecord record, ref string text)
         {
             StringBuilder extra = new StringBuilder();
-            AgingDisplayUtil.AppendFinalizedBarrelGuiCompact(extra, tree);
+            AgingDisplayUtil.AppendFinalizedBarrelGuiCompact(extra, record);
 
             text = text.TrimEnd() + "\n" + extra.ToString();
         }

@@ -6,6 +6,7 @@ namespace AngelsShare
 {
     internal class CaskProfile
     {
+        public int RollSeed { get; set; }
         public string Trait { get; set; }
         public double CaskVariance { get; set; }
         public double IntensityBonus { get; set; }

@@ -1,7 +1,6 @@
 ﻿using System.Text;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
-using Vintagestory.API.Datastructures;
 
 namespace AngelsShare
 {
@@ -12,18 +11,20 @@ namespace AngelsShare
             base.GetHeldItemInfo(inSlot, dsc, world, withDebugInfo);
 
             ItemStack stack = inSlot.Itemstack;
-            ITreeAttribute tree = AgingDisplayUtil.GetMaturationTree(stack);
 
-            if (!AgingDisplayUtil.HasFinalizedAgingData(tree))
+            if (
+                !AgingDisplayUtil.TryGetMaturationRecord(stack, out MaturationRecord record) ||
+                !AgingDisplayUtil.HasFinalizedAgingData(record)
+            )
             {
                 return;
             }
 
-            AgingDisplayUtil.AppendFinalizedShort(dsc, tree);
+            AgingDisplayUtil.AppendFinalizedShort(dsc, record);
 
             if (withDebugInfo)
             {
-                AgingDisplayUtil.AppendDebug(dsc, tree);
+                AgingDisplayUtil.AppendDebug(dsc, record);
             }
         }
     }

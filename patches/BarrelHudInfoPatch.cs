@@ -1,6 +1,5 @@
 ﻿using HarmonyLib;
 using Vintagestory.API.Common;
-using Vintagestory.API.Datastructures;
 using Vintagestory.API.MathTools;
 using Vintagestory.GameContent;
 
@@ -46,14 +45,16 @@ namespace AngelsShare
             if (liquidSlot?.Itemstack == null) return null;
 
             ItemStack liquidStack = liquidSlot.Itemstack;
-            ITreeAttribute tree = AgingDisplayUtil.GetMaturationTree(liquidStack);
+            AgingDisplayUtil.TryGetMaturationRecord(liquidStack, out MaturationRecord record);
 
             if (barrel.Sealed && BarrelAgingUtil.IsAgeableSpirit(liquidStack))
             {
-                if (tree == null || !tree.HasAttribute("sealedAtTotalHours"))
+                if (record?.ActiveSession == null)
                     return "[Angel's Share]\nMaturation: Starting\nSneak-right-click to end aging.";
 
                 AgingSnapshot projected = BarrelAgingCalculator.GetProjectedAging(barrel, liquidStack);
+                if (projected == null)
+                    return "[Angel's Share]\nMaturation: Starting\nSneak-right-click to end aging.";
 
                 string text =
                     "[Angel's Share]\n" +
@@ -74,15 +75,16 @@ namespace AngelsShare
                 return text;
             }
 
-            if (tree != null && AgingDisplayUtil.HasFinalizedAgingData(tree))
+            if (AgingDisplayUtil.HasFinalizedAgingData(record))
             {
+                MaturationOutcome outcome = record.FinalizedProduct.Outcome;
                 return
                     "[Angel's Share]\n" +
-                    "Maturation: " + tree.GetString("maturationDescriptor", "Unknown") + "\n" +
-                    string.Format("Quality: {0:F0}%\n", tree.GetDouble("quality", 0.0)) +
+                    "Maturation: " + (outcome.MaturationStageCode ?? "Unknown") + "\n" +
+                    string.Format("Quality: {0:F0}%\n", outcome.Quality) +
                     "Character: " + GetHudCharacter(
-                        tree.GetDouble("intensity", 0.0),
-                        tree.GetDouble("smoothness", 0.0)
+                        outcome.Intensity,
+                        outcome.Smoothness
                     );
             }
 

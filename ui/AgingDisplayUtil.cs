@@ -2,20 +2,19 @@
 using System.Text;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
-using Vintagestory.API.Datastructures;
 
 namespace AngelsShare
 {
     public static class AgingDisplayUtil
     {
-        public static bool HasFinalizedAgingData(ITreeAttribute tree)
+        public static bool TryGetMaturationRecord(ItemStack stack, out MaturationRecord record)
         {
-            return tree != null && tree.GetBool("angelsshareAged", false);
+            return MaturationRecordCodec.TryRead(stack, out record);
         }
 
-        public static ITreeAttribute GetMaturationTree(Vintagestory.API.Common.ItemStack stack)
+        public static bool HasFinalizedAgingData(MaturationRecord record)
         {
-            return stack?.Attributes?.GetTreeAttribute("maturationData");
+            return record?.FinalizedProduct != null;
         }
 
         public static string GetQualityBand(double quality)
@@ -35,7 +34,7 @@ namespace AngelsShare
             dsc.AppendLine();
             dsc.AppendLine("[Angel's Share: Maturation Tracker]");
             dsc.AppendLine("- Maturation: " + projected.MaturationDescriptor);
-            dsc.AppendLine(string.Format("- Quality: ", GetQualityBand(projected.Quality)));
+            dsc.AppendLine("- Quality: " + GetQualityBand(projected.Quality));
             dsc.AppendLine(string.Format("- Intensity: {0:F0}", projected.Intensity));
             dsc.AppendLine(string.Format("- Smoothness: {0:F0}", projected.Smoothness));
             dsc.AppendLine("- Climate Style: " + GetDisplayClimateStyle(projected.ClimateStyle));
@@ -48,70 +47,82 @@ namespace AngelsShare
             dsc.AppendLine("- Sneak-right-click to end aging.");
         }
 
-        public static void AppendFinalizedShort(StringBuilder dsc, ITreeAttribute tree)
+        public static void AppendFinalizedShort(StringBuilder dsc, MaturationRecord record)
         {
-            if (tree == null) return;
+            FinalizedMaturationProduct product = record?.FinalizedProduct;
+            MaturationOutcome outcome = product?.Outcome;
+            if (outcome == null) return;
 
-            string tier = tree.GetString("ageTier", "unknown");
-            string displayTier = GetDisplayTier(tree);
-            string specialStyle = tree.GetString("specialStyle", "");
-            double quality = tree.GetDouble("quality", 0.0);
-            string maturation = tree.GetString("maturationDescriptor", "Unknown");
+            string displayTier = GetDisplayTier(outcome);
 
             dsc.AppendLine();
             dsc.AppendLine("[Angel's Share]");
             dsc.AppendLine("- " + displayTier);
-            dsc.AppendLine(string.Format("- Quality: {0:F1}%", quality));
-            dsc.AppendLine("- Maturation: " + maturation);
+            dsc.AppendLine(string.Format("- Quality: {0:F1}%", outcome.Quality));
+            dsc.AppendLine("- Maturation: " + (outcome.MaturationStageCode ?? "Unknown"));
             dsc.AppendLine("Hold Shift before hovering for more details.");
         }
 
-        public static void AppendFinalizedDetailed(StringBuilder dsc, ITreeAttribute tree)
+        public static void AppendFinalizedDetailed(StringBuilder dsc, MaturationRecord record)
         {
-            if (tree == null) return;
-
-            string tier = tree.GetString("ageTier", "unknown");
-            string displayTier = GetDisplayTier(tree);
-            string specialStyle = tree.GetString("specialStyle", "");
-
-            double ageDays = tree.GetDouble("ageDays", 0.0);
-            double quality = tree.GetDouble("quality", 0.0);
-            double intensity = tree.GetDouble("intensity", 0.0);
-            double smoothness = tree.GetDouble("smoothness", 0.0);
-            double proof = tree.GetDouble("proof", 0.0);
-
-            string maturation = tree.GetString("maturationDescriptor", "Unknown");
-            string climateStyle = tree.GetString("climateStyle", "Standard Continental Maturation");
+            FinalizedMaturationProduct product = record?.FinalizedProduct;
+            MaturationOutcome outcome = product?.Outcome;
+            if (outcome == null) return;
 
             dsc.AppendLine();
             dsc.AppendLine("[Angel's Share: Barrel Maturation]");
-            dsc.AppendLine("- Tier: " + displayTier);
-            dsc.AppendLine(string.Format("- Quality: {0:F1}%", quality));
-            dsc.AppendLine("- Maturation: " + maturation);
-            dsc.AppendLine(string.Format("- Time Matured: {0:F1} days", ageDays));
-            dsc.AppendLine(string.Format("- Intensity: {0:F0}", intensity));
-            dsc.AppendLine(string.Format("- Smoothness: {0:F0}", smoothness));
-            dsc.AppendLine("- Climate Style: " + GetDisplayClimateStyle(climateStyle));
+            dsc.AppendLine("- Tier: " + GetDisplayTier(outcome));
+            dsc.AppendLine(string.Format("- Quality: {0:F1}%", outcome.Quality));
+            dsc.AppendLine("- Maturation: " + (outcome.MaturationStageCode ?? "Unknown"));
+            dsc.AppendLine(string.Format(
+                "- Actual time sealed: {0:F1} days",
+                product.TotalActualElapsedHours / 24.0
+            ));
+            dsc.AppendLine(string.Format(
+                "- Effective maturation: {0:F1} days",
+                product.TotalEffectiveMaturationHours / 24.0
+            ));
+            dsc.AppendLine(string.Format("- Intensity: {0:F0}", outcome.Intensity));
+            dsc.AppendLine(string.Format("- Smoothness: {0:F0}", outcome.Smoothness));
+            dsc.AppendLine("- Climate Style: " + GetDisplayClimateStyle(outcome.ClimateStyleCode));
 
-            if (tier == "over-oaked")
+            if (outcome.TierCode == "over-oaked")
             {
                 dsc.AppendLine("- Condition: Bitter, excessive wood extraction.");
             }
         }
 
-        public static void AppendDebug(StringBuilder dsc, ITreeAttribute tree)
+        public static void AppendDebug(StringBuilder dsc, MaturationRecord record)
         {
-            if (tree == null) return;
+            if (record == null) return;
 
             dsc.AppendLine();
             dsc.AppendLine("[Angel's Share Debug]");
-            dsc.AppendLine("safeWindowDays: " + tree.GetDouble("safeWindowDays", -1));
-            dsc.AppendLine("maturityRatio: " + tree.GetDouble("maturityRatio", -1));
-            dsc.AppendLine("overAgeRatio: " + tree.GetDouble("overAgeRatio", -1));
-            dsc.AppendLine("caskTrait: " + tree.GetString("caskTrait", "none"));
-            dsc.AppendLine("caskVarianceSeed: " + tree.GetDouble("caskVarianceSeed", -1));
-            dsc.AppendLine("agedFrom: " + tree.GetString("agedFrom", "none"));
-            dsc.AppendLine("agedInto: " + tree.GetString("agedInto", "none"));
+            dsc.AppendLine("schemaVersion: " + record.SchemaVersion);
+            dsc.AppendLine("state: " + record.State);
+            dsc.AppendLine("completedSessions: " + (record.CompletedSessions?.Count ?? 0));
+
+            if (record.ActiveSession != null)
+            {
+                ActiveMaturationSession session = record.ActiveSession;
+                dsc.AppendLine("activeSequence: " + session.Sequence);
+                dsc.AppendLine("sealedAtCalendarHours: " + session.SealedAtCalendarHours);
+                dsc.AppendLine("lastIntegratedAtCalendarHours: " + session.LastIntegratedAtCalendarHours);
+                dsc.AppendLine("actualElapsedHours: " + session.ActualElapsedHours);
+                dsc.AppendLine("effectiveMaturationHours: " + session.EffectiveMaturationHours);
+                dsc.AppendLine("caskProfile: " + (session.Cask?.ProfileCode ?? "none"));
+                dsc.AppendLine("caskRollSeed: " + (session.Cask?.RollSeed ?? 0));
+            }
+
+            if (record.FinalizedProduct != null)
+            {
+                FinalizedMaturationProduct product = record.FinalizedProduct;
+                dsc.AppendLine("totalActualElapsedHours: " + product.TotalActualElapsedHours);
+                dsc.AppendLine("totalEffectiveMaturationHours: " + product.TotalEffectiveMaturationHours);
+                dsc.AppendLine("startingVolumeLitres: " + product.Volume.StartingVolumeLitres);
+                dsc.AppendLine("currentVolumeLitres: " + product.Volume.CurrentVolumeLitres);
+                dsc.AppendLine("productLiquidCode: " + product.ProductLiquidCode);
+            }
         }
 
         private static string StripLiquidPrefix(string langPath)
@@ -278,23 +289,29 @@ namespace AngelsShare
             return NormalizeSpiritDisplayName(localized);
         }
 
-        public static string GetAgedSpiritDisplayName(ItemStack liquidStack, ITreeAttribute tree)
+        public static string GetAgedSpiritDisplayName(ItemStack liquidStack, MaturationRecord record)
         {
             if (liquidStack?.Collectible?.Code == null)
                 return "Aged Spirit";
 
             string baseSpiritName = GetSpiritNameFromVariant(liquidStack);
+            MaturationOutcome outcome = record?.FinalizedProduct?.Outcome;
 
-            if (tree == null)
+            if (outcome == null)
                 return baseSpiritName;
 
-            string specialStyle = tree.GetString("specialStyle", "");
-            double proof = tree.GetDouble("proof", 0.0);
-            double ageStatementYears = tree.GetDouble("ageStatementYears", 0.0);
+            double proof = MaturationRecordCodec.GetDesignationValue(
+                outcome,
+                "angels-share:cask-strength"
+            );
+            double ageStatementYears = MaturationRecordCodec.GetDesignationValue(
+                outcome,
+                "angels-share:age-stated"
+            );
 
             bool isCaskStrength =
                 proof > 0.0 &&
-                specialStyle.Contains("Cask-Strength");
+                MaturationRecordCodec.HasDesignation(outcome, "angels-share:cask-strength");
 
             bool hasAgeStatement =
                 ageStatementYears >= 8.0;
@@ -330,44 +347,65 @@ namespace AngelsShare
             return "Aged " + baseSpiritName;
         }
 
-        public static void AppendFinalizedBarrelGuiCompact(StringBuilder dsc, ITreeAttribute tree)
+        public static void AppendFinalizedBarrelGuiCompact(StringBuilder dsc, MaturationRecord record)
         {
-            if (tree == null) return;
+            FinalizedMaturationProduct product = record?.FinalizedProduct;
+            MaturationOutcome outcome = product?.Outcome;
+            if (outcome == null) return;
 
-            string tier = tree.GetString("ageTier", "unknown");
-            string tierName = GetDisplayTier(tree);
-
-            string specialStyle = tree.GetString("specialStyle", "");
-            string maturation = tree.GetString("maturationDescriptor", "Unknown");
-
-            double quality = tree.GetDouble("quality", 0.0);
-            double ageDays = tree.GetDouble("ageDays", 0.0);
-            double intensity = tree.GetDouble("intensity", 0.0);
-            double smoothness = tree.GetDouble("smoothness", 0.0);
-            double proof = tree.GetDouble("proof", 0.0);
+            string tierName = GetDisplayTier(outcome);
+            string designation = GetDisplayDesignation(outcome);
+            double proof = MaturationRecordCodec.GetDesignationValue(
+                outcome,
+                "angels-share:cask-strength"
+            );
 
             dsc.AppendLine();
             dsc.AppendLine("Angel's Share:");
-            dsc.AppendLine(string.Format("{0} · Quality {1:F0}%", tierName, quality));
+            dsc.AppendLine(string.Format("{0} · Quality {1:F0}%", tierName, outcome.Quality));
 
-            if (specialStyle.Length > 0)
+            if (designation.Length > 0)
             {
-                if (specialStyle.Contains("Cask-Strength") && proof > 0.0)
+                if (
+                    MaturationRecordCodec.HasDesignation(
+                        outcome,
+                        "angels-share:cask-strength"
+                    ) &&
+                    proof > 0.0
+                )
                 {
                     dsc.AppendLine(string.Format("{0:F0} proof", proof));
                 }
                 else
                 {
-                    dsc.AppendLine(specialStyle);
+                    dsc.AppendLine(designation);
                 }
             }
             else
             {
-                string character = GetShortCharacter(intensity, smoothness);
-                dsc.AppendLine(maturation + " · " + character);
+                string character = GetShortCharacter(outcome.Intensity, outcome.Smoothness);
+                dsc.AppendLine((outcome.MaturationStageCode ?? "Unknown") + " · " + character);
             }
 
-            dsc.AppendLine(string.Format("{0:F1} days matured", ageDays));
+            dsc.AppendLine(string.Format(
+                "{0:F1} effective days matured",
+                product.TotalEffectiveMaturationHours / 24.0
+            ));
+        }
+
+        public static string GetDesignationSummary(MaturationOutcome outcome)
+        {
+            if (outcome?.Designations == null || outcome.Designations.Count == 0)
+                return string.Empty;
+
+            string[] codes = new string[outcome.Designations.Count];
+
+            for (int i = 0; i < outcome.Designations.Count; i++)
+            {
+                codes[i] = outcome.Designations[i]?.Code ?? string.Empty;
+            }
+
+            return string.Join(",", codes);
         }
 
         private static string GetShortCharacter(double intensity, double smoothness)
@@ -415,15 +453,50 @@ namespace AngelsShare
             }
         }
 
-        private static string GetDisplayTier(ITreeAttribute tree)
+        private static string GetDisplayTier(MaturationOutcome outcome)
         {
-            string tier = tree.GetString("ageTier", "unknown");
-            string specialStyle = tree.GetString("specialStyle", "");
+            if (outcome == null) return Lang.Get(BarrelAgingUtil.GetLangKeyForAgeTier("white"));
 
-            if (!string.IsNullOrEmpty(specialStyle))
-                return specialStyle;
+            string designation = GetDisplayDesignation(outcome);
 
-            return Lang.Get(BarrelAgingUtil.GetLangKeyForAgeTier(tier));
+            if (!string.IsNullOrEmpty(designation))
+                return designation;
+
+            return Lang.Get(BarrelAgingUtil.GetLangKeyForAgeTier(outcome.TierCode));
+        }
+
+        private static string GetDisplayDesignation(MaturationOutcome outcome)
+        {
+            bool ageStated = MaturationRecordCodec.HasDesignation(
+                outcome,
+                "angels-share:age-stated"
+            );
+            bool caskStrength = MaturationRecordCodec.HasDesignation(
+                outcome,
+                "angels-share:cask-strength"
+            );
+
+            if (ageStated && caskStrength)
+                return "Age-Stated Cask-Strength Reserve";
+
+            if (ageStated)
+                return "Age-Stated Reserve";
+
+            if (caskStrength)
+                return "Cask-Strength Reserve";
+
+            if (outcome?.Designations != null)
+            {
+                foreach (MaturationDesignation designation in outcome.Designations)
+                {
+                    if (designation?.Code != "angels-share:legacy-special") continue;
+
+                    string displayName = designation.Extensions?.GetString("displayName", string.Empty);
+                    if (!string.IsNullOrEmpty(displayName)) return displayName;
+                }
+            }
+
+            return string.Empty;
         }
     }
 }
