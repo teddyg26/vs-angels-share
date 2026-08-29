@@ -41,6 +41,11 @@ $record.ActiveSession.Cask.RollSeed = 42
 $record.ActiveSession.ProjectedOutcome.Quality = 81.5
 $record.ActiveSession.ProjectedOutcome.Extraction = 75.0
 $record.ActiveSession.ProjectedOutcome.Oak = 12.0
+$tooYoungDesignation = [AngelsShare.MaturationDesignation]::new()
+$tooYoungDesignation.Code = "angels-share:age-stated"
+$tooYoungDesignation.NumericValue = 6.0
+$tooYoungDesignation.UnitCode = "years"
+$record.ActiveSession.ProjectedOutcome.Designations.Add($tooYoungDesignation)
 $record.Extensions.SetString("test:future", "preserved")
 
 [AngelsShare.MaturationRecordCodec]::Write($stack, $record)
@@ -65,6 +70,51 @@ Assert-True (
 Assert-True (
     $roundTrip.Extensions.GetString("test:future", "") -eq "preserved"
 ) "Extension data did not round-trip."
+Assert-True (
+    ![AngelsShare.MaturationRecordCodec]::HasDesignation(
+        $roundTrip.ActiveSession.ProjectedOutcome,
+        "angels-share:age-stated"
+    )
+) "Sub-eight-year product retained an age-stated designation."
+
+$namedOutcome = [AngelsShare.MaturationOutcome]::new()
+$proofDesignation = [AngelsShare.MaturationDesignation]::new()
+$proofDesignation.Code = "angels-share:cask-strength"
+$proofDesignation.NumericValue = 122.0
+$proofDesignation.UnitCode = "proof"
+$namedOutcome.Designations.Add($proofDesignation)
+$ageDesignation = [AngelsShare.MaturationDesignation]::new()
+$ageDesignation.Code = "angels-share:age-stated"
+$ageDesignation.NumericValue = 8.0
+$ageDesignation.UnitCode = "years"
+$namedOutcome.Designations.Add($ageDesignation)
+$displayName = [AngelsShare.AgingDisplayUtil]::FormatAgedSpiritDisplayName(
+    "Rye Whiskey",
+    $namedOutcome
+)
+Assert-True (
+    $displayName -eq "122 Proof 8-Year Rye Whiskey"
+) "Compact finalized name did not match the intended format."
+
+$reserveOutcome = [AngelsShare.MaturationOutcome]::new()
+$reserveOutcome.TierCode = "reserve"
+$reserveName = [AngelsShare.AgingDisplayUtil]::FormatAgedSpiritDisplayName(
+    "Rye Whiskey",
+    $reserveOutcome
+)
+Assert-True (
+    $reserveName -eq "Reserve Rye Whiskey"
+) "Reserve product lost its tier in the compact name."
+
+$overOakedOutcome = [AngelsShare.MaturationOutcome]::new()
+$overOakedOutcome.TierCode = "over-oaked"
+$overOakedName = [AngelsShare.AgingDisplayUtil]::FormatAgedSpiritDisplayName(
+    "Rye Whiskey",
+    $overOakedOutcome
+)
+Assert-True (
+    $overOakedName -eq "Over-oaked Rye Whiskey"
+) "Over-oaked product lost its tier in the compact name."
 
 $completed = [AngelsShare.CompletedMaturationSession]::new()
 $completed.Sequence = 2
@@ -112,6 +162,8 @@ $legacy.SetDouble("ageHoursTotal", 24.0)
 $legacy.SetDouble("ageHours", 30.0)
 $legacy.SetBool("angelsshareAged", $true)
 $legacy.SetString("ageTier", "reserve")
+$legacy.SetDouble("maturityRatio", 1.2)
+$legacy.SetDouble("overAgeRatio", 0.2)
 $legacy.SetString("specialStyle", "Age-Stated Cask-Strength Reserve")
 $legacy.SetDouble("proof", 125.0)
 $legacy.SetDouble("ageStatementYears", 12.0)
@@ -128,6 +180,12 @@ Assert-True (
 ) "Legacy finalized state was not recognized."
 Assert-True ($null -eq $migrated.ActiveSession) "Migrated final retained an active session."
 Assert-True ($migrated.CompletedSessions.Count -eq 1) "Migrated history is incomplete."
+Assert-True (
+    $migrated.FinalizedProduct.Outcome.TierCode -eq "reserve"
+) "Legacy migration reclassified the stored tier from derived oak/extraction values."
+Assert-True (
+    $migrated.FinalizedProduct.Outcome.Oak -eq 100.0
+) "Legacy over-age ratio was not mapped into the oak accumulator."
 Assert-True (
     [AngelsShare.MaturationRecordCodec]::HasDesignation(
         $migrated.FinalizedProduct.Outcome,

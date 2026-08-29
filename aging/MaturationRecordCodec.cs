@@ -357,23 +357,25 @@ namespace AngelsShare
             double ageStatementYears
         )
         {
-            bool hasCaskStrength =
-                proof > 0.0 ||
-                (!string.IsNullOrEmpty(specialStyle) &&
-                    (specialStyle.IndexOf("Cask-Strength", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                     specialStyle.IndexOf("Cask-Strength", StringComparison.OrdinalIgnoreCase) >= 0));
+            bool styleDeclaresCaskStrength =
+                !string.IsNullOrEmpty(specialStyle) &&
+                (specialStyle.IndexOf("Cask-Strength", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 specialStyle.IndexOf("Cask-Stregnth", StringComparison.OrdinalIgnoreCase) >= 0);
 
-            bool hasAgeStatement =
-                ageStatementYears > 0.0 ||
-                (!string.IsNullOrEmpty(specialStyle) &&
-                    specialStyle.IndexOf("Age-Stated", StringComparison.OrdinalIgnoreCase) >= 0);
+            bool styleDeclaresAgeStatement =
+                !string.IsNullOrEmpty(specialStyle) &&
+                (specialStyle.IndexOf("Age-Stated", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 specialStyle.IndexOf("-Year Old", StringComparison.OrdinalIgnoreCase) >= 0);
+
+            bool hasCaskStrength = proof > 0.0 && styleDeclaresCaskStrength;
+            bool hasAgeStatement = ageStatementYears >= 8.0 && styleDeclaresAgeStatement;
 
             if (hasAgeStatement)
             {
                 outcome.Designations.Add(new MaturationDesignation
                 {
                     Code = "angels-share:age-stated",
-                    NumericValue = ageStatementYears > 0.0 ? ageStatementYears : null,
+                    NumericValue = ageStatementYears,
                     UnitCode = "years"
                 });
             }
@@ -791,7 +793,7 @@ namespace AngelsShare
                 ITreeAttribute item = tree.GetTreeAttribute(i.ToString());
                 if (item == null) continue;
 
-                values.Add(new MaturationDesignation
+                MaturationDesignation designation = new MaturationDesignation
                 {
                     Code = item.GetString("code", string.Empty),
                     UnitCode = item.GetString("unitCode", string.Empty),
@@ -799,7 +801,17 @@ namespace AngelsShare
                         ? item.GetDouble("numericValue", 0.0)
                         : null,
                     Extensions = ReadExtensions(item)
-                });
+                };
+
+                if (
+                    designation.Code == "angels-share:age-stated" &&
+                    (!designation.NumericValue.HasValue || designation.NumericValue.Value < 8.0)
+                )
+                {
+                    continue;
+                }
+
+                values.Add(designation);
             }
 
             return values;

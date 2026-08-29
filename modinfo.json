@@ -6,7 +6,7 @@
     "teddyg26"
   ],
   "description": "Expanded distillation and barrel aging.",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "dependencies": {
     "game": "1.22.0",
     "survival": "1.22.0"

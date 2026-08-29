@@ -36,6 +36,14 @@ namespace AngelsShare
                     return;
 
                 ItemStack liquidStack = liquidSlot.Itemstack;
+
+                __result = AgingDisplayUtil.NormalizeSpiritNameInText(__result, liquidStack);
+
+                if (BarrelAgingUtil.IsAgeableSpirit(liquidStack))
+                {
+                    TryReplaceDummyRecipeText(barrel, ref __result);
+                }
+
                 if (!AgingDisplayUtil.TryGetMaturationRecord(
                     liquidStack,
                     out MaturationRecord record
@@ -48,13 +56,12 @@ namespace AngelsShare
                     record.ActiveSession != null
                 )
                 {
-                    TryReplaceDummyRecipeText(barrel, ref __result);
                     AppendProjectedAgingText(barrel, liquidStack, ref __result);
                     return;
                 }
 
                 if (AgingDisplayUtil.HasFinalizedAgingData(record))
-                    AppendFinalizedAgingText(record, ref __result);
+                    AppendFinalizedAgingText(liquidStack, record, ref __result);
             }
             catch
             {
@@ -185,13 +192,7 @@ namespace AngelsShare
 
             if (props == null) return;
 
-            string incontainername = Lang.Get(
-                outStack.Collectible.Code.Domain
-                + ":incontainer-"
-                + outStack.Class.ToString().ToLowerInvariant()
-                + "-"
-                + outStack.Collectible.Code.Path
-            );
+            string incontainername = AgingDisplayUtil.GetSpiritDisplayName(outStack);
 
             float litres = (float)barrel.CurrentOutSize / props.ItemsPerLitre;
 
@@ -221,10 +222,14 @@ namespace AngelsShare
             text = text.TrimEnd() + "\n" + extra.ToString();
         }
 
-        private static void AppendFinalizedAgingText(MaturationRecord record, ref string text)
+        private static void AppendFinalizedAgingText(
+            ItemStack liquidStack,
+            MaturationRecord record,
+            ref string text
+        )
         {
             StringBuilder extra = new StringBuilder();
-            AgingDisplayUtil.AppendFinalizedBarrelGuiCompact(extra, record);
+            AgingDisplayUtil.AppendFinalizedBarrelGuiCompact(extra, liquidStack, record);
 
             text = text.TrimEnd() + "\n" + extra.ToString();
         }

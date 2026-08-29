@@ -88,5 +88,5 @@
   "age-reserve": "Reserve",
   "age-overoaked": "Over-oaked",
 
-  "barrel-will-age-into-after-sealing": "Will turn into {0} litres of {1} after sealing."
+  "barrel-will-age-into-after-sealing": "Will turn into {0} litres of Aged {1} after sealing."
 }

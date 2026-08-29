@@ -248,7 +248,7 @@ namespace AngelsShare
             return string.Join(" ", parts);
         }
 
-        private static string GetSpiritNameFromVariant(ItemStack liquidStack)
+        private static string GetLocalizedSpiritName(ItemStack liquidStack)
         {
             if (liquidStack?.Collectible?.Code == null)
                 return "Spirit";
@@ -286,7 +286,32 @@ namespace AngelsShare
                 return FallbackNameFromPath(langPath);
             }
 
-            return NormalizeSpiritDisplayName(localized);
+            return localized;
+        }
+
+        public static string GetSpiritDisplayName(ItemStack liquidStack)
+        {
+            return NormalizeSpiritDisplayName(GetLocalizedSpiritName(liquidStack));
+        }
+
+        public static string NormalizeSpiritNameInText(string text, ItemStack liquidStack)
+        {
+            if (string.IsNullOrEmpty(text) || liquidStack?.Collectible?.Code == null)
+                return text;
+
+            string rawName = GetLocalizedSpiritName(liquidStack);
+            string normalizedName = NormalizeSpiritDisplayName(rawName);
+
+            if (
+                string.IsNullOrEmpty(rawName) ||
+                string.IsNullOrEmpty(normalizedName) ||
+                rawName == normalizedName
+            )
+            {
+                return text;
+            }
+
+            return text.Replace(rawName, normalizedName);
         }
 
         public static string GetAgedSpiritDisplayName(ItemStack liquidStack, MaturationRecord record)
@@ -294,11 +319,22 @@ namespace AngelsShare
             if (liquidStack?.Collectible?.Code == null)
                 return "Aged Spirit";
 
-            string baseSpiritName = GetSpiritNameFromVariant(liquidStack);
+            string baseSpiritName = GetSpiritDisplayName(liquidStack);
             MaturationOutcome outcome = record?.FinalizedProduct?.Outcome;
 
             if (outcome == null)
                 return baseSpiritName;
+
+            return FormatAgedSpiritDisplayName(baseSpiritName, outcome);
+        }
+
+        public static string FormatAgedSpiritDisplayName(
+            string baseSpiritName,
+            MaturationOutcome outcome
+        )
+        {
+            if (string.IsNullOrEmpty(baseSpiritName)) baseSpiritName = "Spirit";
+            if (outcome == null) return baseSpiritName;
 
             double proof = MaturationRecordCodec.GetDesignationValue(
                 outcome,
@@ -319,7 +355,7 @@ namespace AngelsShare
             if (isCaskStrength && hasAgeStatement)
             {
                 return string.Format(
-                    "{0:F0} Proof {1}-Year Old {2}",
+                    "{0:F0} Proof {1}-Year {2}",
                     proof,
                     (int)ageStatementYears,
                     baseSpiritName
@@ -338,59 +374,61 @@ namespace AngelsShare
             if (hasAgeStatement)
             {
                 return string.Format(
-                    "{0}-Year Old {1}",
+                    "{0}-Year {1}",
                     (int)ageStatementYears,
                     baseSpiritName
                 );
             }
 
-            return "Aged " + baseSpiritName;
+            string tierOrSpecial = GetCompactTierOrSpecial(outcome);
+
+            if (string.IsNullOrEmpty(tierOrSpecial))
+                tierOrSpecial = "Aged";
+
+            return tierOrSpecial + " " + baseSpiritName;
         }
 
-        public static void AppendFinalizedBarrelGuiCompact(StringBuilder dsc, MaturationRecord record)
+        private static string GetCompactTierOrSpecial(MaturationOutcome outcome)
         {
-            FinalizedMaturationProduct product = record?.FinalizedProduct;
-            MaturationOutcome outcome = product?.Outcome;
-            if (outcome == null) return;
-
-            string tierName = GetDisplayTier(outcome);
             string designation = GetDisplayDesignation(outcome);
-            double proof = MaturationRecordCodec.GetDesignationValue(
-                outcome,
-                "angels-share:cask-strength"
-            );
+
+            if (!string.IsNullOrEmpty(designation))
+                return designation;
+
+            switch (outcome?.TierCode)
+            {
+                case "reserve":
+                    return "Reserve";
+
+                case "over-oaked":
+                    return "Over-oaked";
+
+                case "young":
+                    return "Young";
+
+                case "rested":
+                    return "Rested";
+
+                case "white":
+                    return "White / Unaged";
+
+                case "aged":
+                default:
+                    return "Aged";
+            }
+        }
+
+        public static void AppendFinalizedBarrelGuiCompact(
+            StringBuilder dsc,
+            ItemStack liquidStack,
+            MaturationRecord record
+        )
+        {
+            if (record?.FinalizedProduct?.Outcome == null) return;
 
             dsc.AppendLine();
             dsc.AppendLine("Angel's Share:");
-            dsc.AppendLine(string.Format("{0} · Quality {1:F0}%", tierName, outcome.Quality));
-
-            if (designation.Length > 0)
-            {
-                if (
-                    MaturationRecordCodec.HasDesignation(
-                        outcome,
-                        "angels-share:cask-strength"
-                    ) &&
-                    proof > 0.0
-                )
-                {
-                    dsc.AppendLine(string.Format("{0:F0} proof", proof));
-                }
-                else
-                {
-                    dsc.AppendLine(designation);
-                }
-            }
-            else
-            {
-                string character = GetShortCharacter(outcome.Intensity, outcome.Smoothness);
-                dsc.AppendLine((outcome.MaturationStageCode ?? "Unknown") + " · " + character);
-            }
-
-            dsc.AppendLine(string.Format(
-                "{0:F1} effective days matured",
-                product.TotalEffectiveMaturationHours / 24.0
-            ));
+            dsc.AppendLine(GetAgedSpiritDisplayName(liquidStack, record));
         }
 
         public static string GetDesignationSummary(MaturationOutcome outcome)
@@ -467,10 +505,10 @@ namespace AngelsShare
 
         private static string GetDisplayDesignation(MaturationOutcome outcome)
         {
-            bool ageStated = MaturationRecordCodec.HasDesignation(
+            bool ageStated = MaturationRecordCodec.GetDesignationValue(
                 outcome,
                 "angels-share:age-stated"
-            );
+            ) >= 8.0;
             bool caskStrength = MaturationRecordCodec.HasDesignation(
                 outcome,
                 "angels-share:cask-strength"
