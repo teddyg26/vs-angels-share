@@ -119,12 +119,36 @@ namespace AngelsShare
 
             if (snapshot == null) return outcome;
 
-            AddLegacyDesignations(
-                outcome,
-                snapshot.SpecialStyle,
-                snapshot.Proof,
-                snapshot.AgeStatementYears
-            );
+            if (snapshot.Designations != null && snapshot.Designations.Count > 0)
+            {
+                foreach (AgingDesignation source in snapshot.Designations)
+                {
+                    if (source == null || string.IsNullOrEmpty(source.Code)) continue;
+
+                    MaturationDesignation designation = new MaturationDesignation
+                    {
+                        Code = source.Code,
+                        NumericValue = source.NumericValue,
+                        UnitCode = source.UnitCode ?? string.Empty
+                    };
+
+                    if (!string.IsNullOrEmpty(source.DisplayName))
+                    {
+                        designation.Extensions.SetString("displayName", source.DisplayName);
+                    }
+
+                    outcome.Designations.Add(designation);
+                }
+            }
+            else
+            {
+                AddLegacyDesignations(
+                    outcome,
+                    snapshot.SpecialStyle,
+                    snapshot.Proof,
+                    snapshot.AgeStatementYears
+                );
+            }
 
             outcome.Extensions.SetDouble("safeWindowDays", snapshot.SafeWindowDays);
             outcome.Extensions.SetDouble("maturityRatio", snapshot.MaturityRatio);

@@ -142,60 +142,17 @@ namespace AngelsShare
                 return "unknown";
             }
 
-            string path = stack.Collectible.Code.Path;
-
             bool isGin =
                 stack.Collectible.Code.Domain == "angels-share" &&
-                path.StartsWith("ginportion-");
+                stack.Collectible.Code.Path.StartsWith("ginportion-");
 
-            bool hasGrace =
-                quality >= 85.0 &&
-                smoothness >= 68.0 &&
-                maturityRatio <= 1.08;
-
-            if (maturityRatio > 1.0 && !hasGrace)
-            {
-                return "over-oaked";
-            }
-
-            double reserveThreshold = isGin ? 0.80 : 0.85;
-
-            bool generalReserve =
-                maturityRatio >= reserveThreshold &&
-                quality >= 78.0 &&
-                Math.Max(intensity, smoothness) >= 75.0;
-
-            bool coldReserve =
-                maturityRatio >= 0.90 &&
-                quality >= 90.0 &&
-                smoothness >= 70.0;
-
-            bool hotReserve =
-                maturityRatio >= 0.78 &&
-                quality >= 82.0 &&
-                intensity >= 82.0;
-
-            if (generalReserve || coldReserve || hotReserve)
-            {
-                return "reserve";
-            }
-
-            if (maturityRatio >= 0.55)
-            {
-                return "aged";
-            }
-
-            if (maturityRatio >= 0.25)
-            {
-                return "young";
-            }
-
-            if (maturityRatio >= 0.05)
-            {
-                return "rested";
-            }
-
-            return "white";
+            return MaturationMath.GetAgeTierFromMaturity(
+                isGin,
+                maturityRatio,
+                quality,
+                intensity,
+                smoothness
+            );
         }
 
         public static string GetLangKeyForAgeTier(string tier)

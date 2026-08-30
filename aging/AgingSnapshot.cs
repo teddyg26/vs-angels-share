@@ -33,5 +33,7 @@ namespace AngelsShare
 
         public double Proof { get; set; }
         public double AgeStatementYears { get; set; }
+        public List<AgingDesignation> Designations { get; set; }
+            = new List<AgingDesignation>();
     }
 }

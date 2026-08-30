@@ -4,7 +4,7 @@ using System.Text;
 
 namespace AngelsShare
 {
-    internal class CaskProfile
+    public sealed class CaskProfile
     {
         public int RollSeed { get; set; }
         public string Trait { get; set; }

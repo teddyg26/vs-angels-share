@@ -4,6 +4,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$script:AssertionCount = 0
 
 function Assert-True {
     param(
@@ -14,6 +15,130 @@ function Assert-True {
     if (!$Condition) {
         throw $Message
     }
+
+    $script:AssertionCount++
+}
+
+function Assert-Equal {
+    param(
+        [object]$Actual,
+        [object]$Expected,
+        [string]$Message
+    )
+
+    if ($Actual -ne $Expected) {
+        throw "$Message Expected '$Expected', received '$Actual'."
+    }
+
+    $script:AssertionCount++
+}
+
+function Assert-Close {
+    param(
+        [double]$Actual,
+        [double]$Expected,
+        [double]$Tolerance = 0.000001,
+        [string]$Message
+    )
+
+    if ([Math]::Abs($Actual - $Expected) -gt $Tolerance) {
+        throw "$Message Expected $Expected +/- $Tolerance, received $Actual."
+    }
+
+    $script:AssertionCount++
+}
+
+function Assert-Designation {
+    param(
+        [object]$Snapshot,
+        [string]$Code,
+        [Nullable[double]]$NumericValue,
+        [string]$Message
+    )
+
+    $matches = @($Snapshot.Designations | Where-Object { $_.Code -eq $Code })
+    Assert-True ($matches.Count -eq 1) $Message
+
+    if ($null -ne $NumericValue) {
+        Assert-Close $matches[0].NumericValue.Value $NumericValue.Value 0.000001 $Message
+    }
+}
+
+function Invoke-MaturationScenario {
+    param(
+        [string]$LiquidCode,
+        [double]$ActualElapsedHours,
+        [double]$EffectiveMaturationHours,
+        [double]$AverageTemperature,
+        [double]$AverageRainfall,
+        [object]$Cask,
+        [object]$Loss = $null
+    )
+
+    if ($null -eq $Loss) {
+        $Loss = [AngelsShare.MaturationLossInput]::new()
+    }
+
+    $input = [AngelsShare.MaturationCalculationInput]::new()
+    $input.LiquidCode = $LiquidCode
+    $input.TotalActualElapsedHours = $ActualElapsedHours
+    $input.TotalEffectiveMaturationHours = $EffectiveMaturationHours
+    $input.AverageTemperature = $AverageTemperature
+    $input.AverageRainfall = $AverageRainfall
+    $input.AverageHumidityModifier =
+        [AngelsShare.MaturationMath]::GetHumidityModifier($AverageRainfall)
+    $input.Cask = $Cask
+    $input.Loss = $Loss
+
+    return [AngelsShare.MaturationMath]::Calculate($input)
+}
+
+function Invoke-MaturationTimeline {
+    param(
+        [string]$LiquidCode,
+        [object[]]$ClimatePeriods,
+        [object]$Cask,
+        [object]$Loss = $null
+    )
+
+    $actualHours = 0.0
+    $effectiveHours = 0.0
+    $temperatureHourIntegral = 0.0
+    $rainfallHourIntegral = 0.0
+    $humidityHourIntegral = 0.0
+
+    foreach ($periodInput in $ClimatePeriods) {
+        $period = [AngelsShare.MaturationMath]::CalculateClimatePeriod(
+            $periodInput.Hours,
+            $periodInput.Temperature,
+            $periodInput.Rainfall,
+            $Cask
+        )
+        $actualHours += $period.DurationHours
+        $effectiveHours += $period.EffectiveMaturationHours
+        $temperatureHourIntegral += $period.Temperature * $period.DurationHours
+        $rainfallHourIntegral += $period.Rainfall * $period.DurationHours
+        $humidityHourIntegral += $period.HumidityModifier * $period.DurationHours
+    }
+
+    if ($actualHours -le 0.0) {
+        return Invoke-MaturationScenario `
+            $LiquidCode 0.0 0.0 20.0 0.5 $Cask $Loss
+    }
+
+    $input = [AngelsShare.MaturationCalculationInput]::new()
+    $input.LiquidCode = $LiquidCode
+    $input.TotalActualElapsedHours = $actualHours
+    $input.TotalEffectiveMaturationHours = $effectiveHours
+    $input.AverageTemperature = $temperatureHourIntegral / $actualHours
+    $input.AverageRainfall = $rainfallHourIntegral / $actualHours
+    $input.AverageHumidityModifier = $humidityHourIntegral / $actualHours
+    $input.Cask = $Cask
+    $input.Loss = $null -eq $Loss `
+        ? [AngelsShare.MaturationLossInput]::new() `
+        : $Loss
+
+    return [AngelsShare.MaturationMath]::Calculate($input)
 }
 
 [void][Reflection.Assembly]::LoadFrom((Join-Path $GamePath "VintagestoryAPI.dll"))
@@ -212,4 +337,345 @@ Assert-True (
     [AngelsShare.MaturationRecordCodec]::HasStoredRecord($futureStack)
 ) "Unsupported future schema was not preserved as stored data."
 
-Write-Host "Maturation schema round-trip, migration, and version checks passed."
+# Pure calculation boundary: climate and calendar units.
+$baselineCask = [AngelsShare.MaturationMath]::CreateBaselineCaskProfile()
+$temperatePeriod = [AngelsShare.MaturationMath]::CalculateClimatePeriod(
+    24.0,
+    20.0,
+    0.5,
+    $baselineCask
+)
+$hotDryPeriod = [AngelsShare.MaturationMath]::CalculateClimatePeriod(
+    24.0,
+    30.0,
+    0.2,
+    $baselineCask
+)
+$coolHumidPeriod = [AngelsShare.MaturationMath]::CalculateClimatePeriod(
+    24.0,
+    12.0,
+    0.75,
+    $baselineCask
+)
+
+Assert-Close $temperatePeriod.HumidityModifier 1.025 0.000001 `
+    "Temperate humidity modifier changed unexpectedly."
+Assert-Close $temperatePeriod.EffectiveMaturationHours 24.6 0.000001 `
+    "Temperate effective maturation changed unexpectedly."
+$constantClimateResult = [AngelsShare.MaturationMath]::CalculateConstantClimate(
+    "angels-share:whitespiritportion-rye",
+    24.0,
+    20.0,
+    0.5,
+    $baselineCask,
+    $null
+)
+Assert-Close $constantClimateResult.Snapshot.AgeHours 24.6 0.000001 `
+    "Constant-climate convenience calculation lost effective maturation."
+Assert-Close $constantClimateResult.Snapshot.AgeDays 1.025 0.000001 `
+    "Constant-climate convenience calculation converted hours to days incorrectly."
+Assert-True (
+    $hotDryPeriod.EffectiveMaturationHours -gt $temperatePeriod.EffectiveMaturationHours
+) "Hot, dry climate did not mature faster than temperate climate."
+Assert-True (
+    $coolHumidPeriod.EffectiveMaturationHours -lt $temperatePeriod.EffectiveMaturationHours
+) "Cool, humid climate did not mature slower than temperate climate."
+Assert-Close (
+    [AngelsShare.MaturationMath]::ConvertCalendarHoursToDays(240.0)
+) 10.0 0.000001 "Calendar-hour conversion regressed to the old 24x climate bug."
+
+$mixedClimateTimeline = @(
+    [pscustomobject]@{ Hours = 120.0; Temperature = 30.0; Rainfall = 0.2 },
+    [pscustomobject]@{ Hours = 120.0; Temperature = 10.0; Rainfall = 0.8 }
+)
+$coldWetPeriod = [AngelsShare.MaturationMath]::CalculateClimatePeriod(
+    24.0,
+    10.0,
+    0.8,
+    $baselineCask
+)
+$mixedClimateResult = Invoke-MaturationTimeline `
+    "angels-share:whitespiritportion-rye" `
+    $mixedClimateTimeline `
+    $baselineCask
+Assert-Close $mixedClimateResult.Snapshot.TotalHours 240.0 0.000001 `
+    "Multi-period climate timeline lost actual elapsed hours."
+Assert-Close $mixedClimateResult.Snapshot.AverageTemperature 20.0 0.000001 `
+    "Multi-period climate timeline averaged temperature incorrectly."
+Assert-Close $mixedClimateResult.Snapshot.AverageRainfall 0.5 0.000001 `
+    "Multi-period climate timeline averaged rainfall incorrectly."
+Assert-Close $mixedClimateResult.Snapshot.AverageHumidityModifier 1.025 0.000001 `
+    "Multi-period climate timeline averaged humidity incorrectly."
+Assert-Close $mixedClimateResult.Snapshot.AgeHours (
+    $hotDryPeriod.EffectiveMaturationHours * 5.0 +
+    $coldWetPeriod.EffectiveMaturationHours * 5.0
+) 0.000001 "Multi-period climate timeline integrated effective aging incorrectly."
+
+# Pure cask seed/profile boundary.
+$caskSeed = [AngelsShare.MaturationMath]::MakeCaskSeed(
+    12,
+    64,
+    -9,
+    123.5,
+    100,
+    "angels-share:whitespiritportion-rye"
+)
+$sameCaskSeed = [AngelsShare.MaturationMath]::MakeCaskSeed(
+    12,
+    64,
+    -9,
+    123.5,
+    100,
+    "angels-share:whitespiritportion-rye"
+)
+$adjacentCaskSeed = [AngelsShare.MaturationMath]::MakeCaskSeed(
+    13,
+    64,
+    -9,
+    123.5,
+    100,
+    "angels-share:whitespiritportion-rye"
+)
+$rolledCask = [AngelsShare.MaturationMath]::RollCaskProfile($caskSeed)
+$rerolledCask = [AngelsShare.MaturationMath]::RollCaskProfile($caskSeed)
+
+Assert-Equal $sameCaskSeed $caskSeed "Identical cask inputs produced different seeds."
+Assert-Equal $caskSeed 1805617265 "The numeric cask seed algorithm changed."
+Assert-True ($adjacentCaskSeed -ne $caskSeed) `
+    "Changing barrel position did not change the cask seed."
+Assert-Equal $rerolledCask.Trait $rolledCask.Trait `
+    "A cask seed did not reproduce its trait."
+Assert-Equal $rolledCask.Trait "standard" `
+    "Pinned cask seed changed its selected profile."
+Assert-Close $rerolledCask.CaskVariance $rolledCask.CaskVariance 0.000000000001 `
+    "A cask seed did not reproduce its maturation variance."
+Assert-Close $rerolledCask.QualityBonus $rolledCask.QualityBonus 0.000000000001 `
+    "A cask seed did not reproduce its quality bonus."
+Assert-Close $rolledCask.CaskVariance 1.01324440622388 0.000000000001 `
+    "Pinned standard cask variance changed."
+Assert-Close $rolledCask.QualityBonus -0.587993219302964 0.000000000001 `
+    "Pinned standard cask quality bonus changed."
+
+$caskTraitCases = @(
+    [pscustomobject]@{ Seed = 0; Trait = "standard" },
+    [pscustomobject]@{ Seed = 1; Trait = "expressive" },
+    [pscustomobject]@{ Seed = 14; Trait = "tight-grain" },
+    [pscustomobject]@{ Seed = 16; Trait = "wide-grain" },
+    [pscustomobject]@{ Seed = 18; Trait = "gentle" },
+    [pscustomobject]@{ Seed = 35; Trait = "unicorn" },
+    [pscustomobject]@{ Seed = 146; Trait = "flawed" }
+)
+
+foreach ($case in $caskTraitCases) {
+    $profile = [AngelsShare.MaturationMath]::RollCaskProfile($case.Seed)
+    Assert-Equal $profile.Trait $case.Trait `
+        "Cask trait boundary changed for seed $($case.Seed)."
+}
+
+# Timing thresholds stay independently testable from item/block APIs.
+Assert-Equal (
+    [AngelsShare.MaturationMath]::GetMaturationDescriptor(0.049999)
+) "Raw" "Raw/resting timing boundary changed."
+Assert-Equal (
+    [AngelsShare.MaturationMath]::GetMaturationDescriptor(0.05)
+) "Resting" "Resting timing boundary changed."
+Assert-Equal (
+    [AngelsShare.MaturationMath]::GetMaturationDescriptor(0.55)
+) "Maturing" "Maturing timing boundary changed."
+Assert-Equal (
+    [AngelsShare.MaturationMath]::GetMaturationDescriptor(0.98)
+) "At the Edge" "Peak timing boundary changed."
+Assert-Equal (
+    [AngelsShare.MaturationMath]::GetMaturationDescriptor(1.12)
+) "Over-Oaked" "Over-oaked timing boundary changed."
+Assert-Equal (
+    [AngelsShare.MaturationMath]::GetAgeTierFromMaturity(
+        $true,
+        0.82,
+        90.0,
+        80.0,
+        50.0
+    )
+) "reserve" "Gin reserve timing threshold changed."
+Assert-Equal (
+    [AngelsShare.MaturationMath]::GetAgeTierFromMaturity(
+        $false,
+        0.82,
+        90.0,
+        80.0,
+        50.0
+    )
+) "aged" "Spirit reserve timing threshold changed."
+Assert-Equal (
+    [AngelsShare.MaturationMath]::GetAgeTierFromMaturity(
+        $false,
+        1.05,
+        90.0,
+        60.0,
+        70.0
+    )
+) "reserve" "Grace-window product was prematurely classified as over-oaked."
+Assert-Equal (
+    [AngelsShare.MaturationMath]::GetAgeTierFromMaturity(
+        $false,
+        1.09,
+        90.0,
+        60.0,
+        70.0
+    )
+) "over-oaked" "Product outside the grace window avoided over-oaked classification."
+
+# Representative outcome cases are data-only inputs. When balance formulas are
+# intentionally revised, these expected baselines are the focused values to audit.
+$calculationCases = @(
+    [pscustomobject]@{
+        Name = "Temperate near-peak standard cask"
+        LiquidCode = "angels-share:whitespiritportion-rye"
+        ActualHours = 410.4
+        EffectiveHours = 18.0 * 0.95 * 24.0
+        Temperature = 20.0
+        Rainfall = 0.5
+        Cask = $baselineCask
+        ExpectedSafeWindow = 18.0
+        ExpectedMaturity = 0.95
+        ExpectedQuality = 100.0
+        ExpectedIntensity = 53.75
+        ExpectedSmoothness = 48.75
+        ExpectedTier = "aged"
+        ExpectedSpecial = ""
+        ExpectedDesignationCodes = @()
+    },
+    [pscustomobject]@{
+        Name = "Hot-dry near-peak standard cask"
+        LiquidCode = "angels-share:whitespiritportion-corn"
+        ActualHours = 144.0
+        EffectiveHours = 6.2 * 0.95 * 24.0
+        Temperature = 30.0
+        Rainfall = 0.2
+        Cask = $baselineCask
+        ExpectedSafeWindow = 6.2
+        ExpectedMaturity = 0.95
+        ExpectedQuality = 100.0
+        ExpectedIntensity = 100.0
+        ExpectedSmoothness = 33.75
+        ExpectedTier = "reserve"
+        ExpectedSpecial = "Cask-Strength Reserve"
+        ExpectedDesignationCodes = @("angels-share:cask-strength")
+    },
+    [pscustomobject]@{
+        Name = "Cool-humid near-peak standard cask"
+        LiquidCode = "angels-share:whitespiritportion-rye"
+        ActualHours = 712.8
+        EffectiveHours = 29.7 * 0.95 * 24.0
+        Temperature = 12.0
+        Rainfall = 0.75
+        Cask = $baselineCask
+        ExpectedSafeWindow = 29.7
+        ExpectedMaturity = 0.95
+        ExpectedQuality = 100.0
+        ExpectedIntensity = 33.75
+        ExpectedSmoothness = 87.75
+        ExpectedTier = "reserve"
+        ExpectedSpecial = "16-Year Old Reserve"
+        ExpectedDesignationCodes = @("angels-share:age-stated")
+    }
+)
+
+foreach ($case in $calculationCases) {
+    $calculation = Invoke-MaturationScenario `
+        $case.LiquidCode `
+        $case.ActualHours `
+        $case.EffectiveHours `
+        $case.Temperature `
+        $case.Rainfall `
+        $case.Cask
+    $snapshot = $calculation.Snapshot
+
+    Assert-Close $snapshot.SafeWindowDays $case.ExpectedSafeWindow 0.000001 `
+        "$($case.Name): safe window changed."
+    Assert-Close $snapshot.MaturityRatio $case.ExpectedMaturity 0.000001 `
+        "$($case.Name): maturity ratio changed."
+    Assert-Close $snapshot.Quality $case.ExpectedQuality 0.000001 `
+        "$($case.Name): quality changed."
+    Assert-Close $snapshot.Intensity $case.ExpectedIntensity 0.000001 `
+        "$($case.Name): intensity changed."
+    Assert-Close $snapshot.Smoothness $case.ExpectedSmoothness 0.000001 `
+        "$($case.Name): smoothness changed."
+    Assert-Equal $snapshot.Tier $case.ExpectedTier `
+        "$($case.Name): tier changed."
+    Assert-Equal $snapshot.SpecialStyle $case.ExpectedSpecial `
+        "$($case.Name): designation label changed."
+
+    $actualDesignationCodes = @($snapshot.Designations | ForEach-Object { $_.Code })
+    Assert-Equal (
+        $actualDesignationCodes -join ","
+    ) ($case.ExpectedDesignationCodes -join ",") `
+        "$($case.Name): structured designation set changed."
+}
+
+$hotDryResult = Invoke-MaturationScenario `
+    "angels-share:whitespiritportion-corn" `
+    144.0 `
+    (6.2 * 0.95 * 24.0) `
+    30.0 `
+    0.2 `
+    $baselineCask
+Assert-Designation $hotDryResult.Snapshot "angels-share:cask-strength" 155.0 `
+    "Cask-strength proof designation changed."
+
+$coolHumidResult = Invoke-MaturationScenario `
+    "angels-share:whitespiritportion-rye" `
+    712.8 `
+    (29.7 * 0.95 * 24.0) `
+    12.0 `
+    0.75 `
+    $baselineCask
+Assert-Designation $coolHumidResult.Snapshot "angels-share:age-stated" 16.0 `
+    "Age-stated year designation changed."
+
+$structuredOutcome = [AngelsShare.MaturationRecordCodec]::CreateOutcome(
+    $hotDryResult.Snapshot
+)
+Assert-True (
+    [AngelsShare.MaturationRecordCodec]::HasDesignation(
+        $structuredOutcome,
+        "angels-share:cask-strength"
+    )
+) "Pure cask-strength result was not carried into the versioned schema."
+
+# Loss accounting is calculated without assuming the future evaporation formula.
+# A zero conservation error means all observed volume change has a named cause.
+$lossInput = [AngelsShare.MaturationLossInput]::new()
+$lossInput.StartingVolumeLitres = 10.0
+$lossInput.CurrentVolumeLitres = 9.4
+$lossInput.AngelsShareLostLitres = 0.4
+$lossInput.WhiskeyThiefSampledLitres = 0.1
+$lossInput.OtherLossLitres = 0.1
+$lossInput.FractionalAngelsShareRemainderLitres = 0.004
+$loss = [AngelsShare.MaturationMath]::CalculateLoss($lossInput)
+
+Assert-Close $loss.TotalVolumeChangeLitres 0.6 0.000001 `
+    "Total volume loss was calculated incorrectly."
+Assert-Close $loss.AccountedLossLitres 0.6 0.000001 `
+    "Named loss categories were summed incorrectly."
+Assert-Close $loss.ConservationErrorLitres 0.0 0.000001 `
+    "Conserved loss inputs produced a conservation error."
+Assert-Close $loss.RemainingVolumeFraction 0.94 0.000001 `
+    "Remaining volume fraction was calculated incorrectly."
+Assert-Close $loss.AngelsShareLossFraction 0.04 0.000001 `
+    "Angel's-share loss fraction was calculated incorrectly."
+Assert-Close $loss.FractionalAngelsShareRemainderLitres 0.004 0.000001 `
+    "Fractional angel's-share remainder was discarded."
+
+$unaccountedLossInput = [AngelsShare.MaturationLossInput]::new()
+$unaccountedLossInput.StartingVolumeLitres = 10.0
+$unaccountedLossInput.CurrentVolumeLitres = 9.5
+$unaccountedLossInput.AngelsShareLostLitres = 0.4
+$unaccountedLoss = [AngelsShare.MaturationMath]::CalculateLoss($unaccountedLossInput)
+Assert-Close $unaccountedLoss.ConservationErrorLitres 0.1 0.000001 `
+    "Unaccounted volume change was not exposed by the loss result."
+
+Write-Host (
+    "Maturation schema and pure calculation harness passed {0} assertions across climate, cask, timing, quality, tier, designation, and loss behavior." -f `
+        $script:AssertionCount
+)
