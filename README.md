@@ -1,4 +1,11 @@
 # Dev Build Commands:
+
+- Run the game from the terminal for debugging:
+```PowerShell
+cd "$env:VINTAGE_STORY"
+dotnet .\VintageStory.dll --tracelog
+```
+
 - Quick run:
 ```PowerShell
 powershell -ExecutionPolicy Bypass -File .\tools\deploy.ps1

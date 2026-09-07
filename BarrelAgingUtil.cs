@@ -1,11 +1,13 @@
 ﻿using System;
 using Vintagestory.API.Common;
+using Vintagestory.GameContent;
 
 namespace AngelsShare
 {
     public static class BarrelAgingUtil
     {
         public const int LiquidSlotId = 1;
+        public const double MinimumAgingVolumeLitres = 2.0;
 
         public static bool IsAgeableSpirit(ItemStack stack)
         {
@@ -41,81 +43,77 @@ namespace AngelsShare
             return false;
         }
 
-        public static bool ConvertAgingSpiritOnUnseal(ICoreAPI api, ItemSlot liquidSlot)
+        public static bool TryResolveAgedOutput(
+            ICoreAPI api,
+            ItemStack inputStack,
+            out AssetLocation outputCode,
+            out Item outputItem,
+            out int outputStackSize,
+            out string failureReason
+        )
         {
-            if (api == null || liquidSlot?.Itemstack == null)
+            outputCode = null;
+            outputItem = null;
+            outputStackSize = 0;
+            failureReason = null;
+
+            if (api?.World == null || inputStack?.Collectible == null)
             {
+                failureReason = "The barrel contents could not be inspected.";
                 return false;
             }
 
-            ItemStack oldStack = liquidSlot.Itemstack;
-
-            if (!TryGetAgedOutputCode(oldStack, out AssetLocation outputCode))
+            if (!TryGetAgedOutputCode(inputStack, out outputCode))
             {
+                failureReason = "This liquid has no supported aged output.";
                 return false;
             }
 
-            Item newItem = api.World.GetItem(outputCode);
-
-            if (newItem == null)
+            outputItem = api.World.GetItem(outputCode);
+            if (outputItem == null)
             {
-                api.Logger.Warning("[Angel's Share] Could not find aged output item: " + outputCode);
+                failureReason = "The aged output item " + outputCode + " is unavailable.";
                 return false;
             }
 
-            ItemStack newStack = new ItemStack(newItem, oldStack.StackSize);
-
-            if (oldStack.Attributes != null)
+            WaterTightContainableProps inputProps =
+                BlockLiquidContainerBase.GetContainableProps(inputStack);
+            if (inputProps == null || inputProps.ItemsPerLitre <= 0.0f)
             {
-                newStack.Attributes = oldStack.Attributes.Clone();
+                failureReason = "The barrel contents do not define a usable liquid volume.";
+                return false;
             }
 
-            if (!MaturationRecordCodec.TryRead(newStack, out MaturationRecord record))
+            double inputLitres = inputStack.StackSize / (double)inputProps.ItemsPerLitre;
+            if (inputLitres + 0.000001 < MinimumAgingVolumeLitres)
             {
-                api.Logger.Warning(
-                    "[Angel's Share] Converted {0}, but its maturation record could not be read.",
-                    oldStack.Collectible.Code
+                failureReason = string.Format(
+                    "The barrel contains only {0:0.##} litres; at least {1:0.##} litres are required.",
+                    inputLitres,
+                    MinimumAgingVolumeLitres
                 );
                 return false;
             }
 
-            if (record.FinalizedProduct == null)
+            ItemStack outputProbe = new ItemStack(outputItem, 1);
+            WaterTightContainableProps outputProps =
+                BlockLiquidContainerBase.GetContainableProps(outputProbe);
+            if (outputProps == null || outputProps.ItemsPerLitre <= 0.0f)
             {
-                api.Logger.Warning(
-                    "[Angel's Share] Refusing to convert {0}: maturation was not finalized.",
-                    oldStack.Collectible.Code
-                );
+                failureReason = "The aged output item does not define a usable liquid volume.";
                 return false;
             }
 
-            record.FinalizedProduct.ProductLiquidCode = outputCode.ToString();
-
-            if (record.CompletedSessions.Count > 0)
+            double exactOutputSize = inputLitres * outputProps.ItemsPerLitre;
+            outputStackSize = (int)Math.Round(exactOutputSize);
+            if (
+                outputStackSize <= 0 ||
+                Math.Abs(outputStackSize - exactOutputSize) > 0.000001
+            )
             {
-                record.CompletedSessions[record.CompletedSessions.Count - 1].OutputLiquidCode =
-                    outputCode.ToString();
+                failureReason = "The aged output cannot represent the barrel's liquid volume exactly.";
+                return false;
             }
-
-            MaturationRecordCodec.Write(newStack, record);
-
-            MaturationOutcome outcome = record.FinalizedProduct.Outcome;
-            double effectiveDays = record.FinalizedProduct.TotalEffectiveMaturationHours / 24.0;
-
-            api.Logger.Notification(
-                "[Angel's Share] Converted {0} -> {1}, effectiveDays={2:F2}, quality={3:F2}, intensity={4:F1}, smoothness={5:F1}, tier={6}, designations={7}, newClass={8}",
-                oldStack.Collectible.Code,
-                outputCode,
-                effectiveDays,
-                outcome?.Quality ?? 0.0,
-                outcome?.Intensity ?? 0.0,
-                outcome?.Smoothness ?? 0.0,
-                outcome?.TierCode ?? "unknown",
-                AgingDisplayUtil.GetDesignationSummary(outcome),
-                newStack.Collectible.GetType().FullName
-            );
-
-            liquidSlot.Itemstack = newStack;
-            liquidSlot.MarkDirty();
 
             return true;
         }

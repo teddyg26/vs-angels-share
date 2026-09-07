@@ -141,9 +141,60 @@ function Invoke-MaturationTimeline {
     return [AngelsShare.MaturationMath]::Calculate($input)
 }
 
+[void][Reflection.Assembly]::LoadFrom((Join-Path $GamePath "Lib\protobuf-net.dll"))
 [void][Reflection.Assembly]::LoadFrom((Join-Path $GamePath "VintagestoryAPI.dll"))
 [void][Reflection.Assembly]::LoadFrom((Join-Path $GamePath "Mods\VSSurvivalMod.dll"))
 [void][Reflection.Assembly]::LoadFrom((Join-Path $ModPath "AngelsShare.dll"))
+
+# Lifecycle input/output routing remains explicit and independently testable.
+$whiteSpiritItem = [Vintagestory.API.Common.Item]::new()
+$whiteSpiritItem.Code = [Vintagestory.API.Common.AssetLocation]::new(
+    "angels-share",
+    "whitespiritportion-rye"
+)
+$whiteSpiritStack = [Vintagestory.API.Common.ItemStack]::new($whiteSpiritItem, 200)
+$whiteSpiritOutput = $null
+Assert-True (
+    [AngelsShare.BarrelAgingUtil]::TryGetAgedOutputCode(
+        $whiteSpiritStack,
+        [ref]$whiteSpiritOutput
+    )
+) "White spirit did not resolve to an aged output."
+Assert-Equal $whiteSpiritOutput.ToString() "angels-share:spiritportion-rye" `
+    "White spirit resolved to the wrong aged output."
+
+$ginItem = [Vintagestory.API.Common.Item]::new()
+$ginItem.Code = [Vintagestory.API.Common.AssetLocation]::new(
+    "angels-share",
+    "ginportion-cassava"
+)
+$ginStack = [Vintagestory.API.Common.ItemStack]::new($ginItem, 200)
+$ginOutput = $null
+Assert-True (
+    [AngelsShare.BarrelAgingUtil]::TryGetAgedOutputCode($ginStack, [ref]$ginOutput)
+) "Gin could not begin another aging session."
+Assert-Equal $ginOutput.ToString() "angels-share:ginportion-cassava" `
+    "Gin re-aging changed its liquid identity."
+
+$unsupportedItem = [Vintagestory.API.Common.Item]::new()
+$unsupportedItem.Code = [Vintagestory.API.Common.AssetLocation]::new(
+    "angels-share",
+    "spiritportion-rye"
+)
+$unsupportedStack = [Vintagestory.API.Common.ItemStack]::new($unsupportedItem, 200)
+$unsupportedOutput = $null
+Assert-True (
+    ![AngelsShare.BarrelAgingUtil]::TryGetAgedOutputCode(
+        $unsupportedStack,
+        [ref]$unsupportedOutput
+    )
+) "A finalized spirit was incorrectly treated as a supported aging input."
+Assert-Close ([AngelsShare.BarrelAgingUtil]::MinimumAgingVolumeLitres) 2.0 0.0 `
+    "The code minimum diverged from the continuous-aging recipe minimum."
+Assert-True ([AngelsShare.BarrelQuickUnsealGesture]::IsQuickRelease(200)) `
+    "A release at the quick-unseal boundary was treated as a hold."
+Assert-True (![AngelsShare.BarrelQuickUnsealGesture]::IsQuickRelease(201)) `
+    "A click-and-hold gesture was treated as a quick unseal."
 
 $stack = [Vintagestory.API.Common.ItemStack]::new()
 $stack.Attributes = [Vintagestory.API.Datastructures.TreeAttribute]::new()
@@ -278,6 +329,36 @@ Assert-True (
     $null -eq $finalTree.GetTreeAttribute("activeSession")
 ) "Serialized finalized data retained the active-session subtree."
 
+# A finalized product may begin a later session (resealing and gin re-aging),
+# while its completed history and aggregate outcome remain available.
+$reagingStack = [Vintagestory.API.Common.ItemStack]::new()
+$reagingStack.Attributes = $stack.Attributes.Clone()
+$reagingRecord = $finalRoundTrip
+$reagingRecord.State = [AngelsShare.MaturationRecordState]::Active
+$reagingRecord.ActiveSession = [AngelsShare.ActiveMaturationSession]::new()
+$reagingRecord.ActiveSession.Sequence = 3
+$reagingRecord.ActiveSession.InputLiquidCode = "angels-share:ginportion-cassava"
+$reagingRecord.ActiveSession.SealedAtCalendarHours = 160.0
+$reagingRecord.ActiveSession.LastIntegratedAtCalendarHours = 160.0
+
+[AngelsShare.MaturationRecordCodec]::Write($reagingStack, $reagingRecord)
+$reloadedReagingRecord = $null
+Assert-True (
+    [AngelsShare.MaturationRecordCodec]::TryRead(
+        $reagingStack,
+        [ref]$reloadedReagingRecord
+    )
+) "A resealed product did not survive save/reload serialization."
+Assert-True (
+    $reloadedReagingRecord.State -eq [AngelsShare.MaturationRecordState]::Active
+) "A resealed product did not reload as active."
+Assert-Equal $reloadedReagingRecord.ActiveSession.Sequence 3 `
+    "A resealed product lost its new session sequence."
+Assert-Equal $reloadedReagingRecord.CompletedSessions.Count 1 `
+    "Beginning another session changed completed maturation history."
+Assert-True ($null -ne $reloadedReagingRecord.FinalizedProduct) `
+    "Beginning another session discarded the prior finalized product."
+
 $legacyStack = [Vintagestory.API.Common.ItemStack]::new()
 $legacyStack.Attributes = [Vintagestory.API.Datastructures.TreeAttribute]::new()
 $legacy = $legacyStack.Attributes.GetOrAddTreeAttribute("maturationData")
@@ -358,9 +439,9 @@ $coolHumidPeriod = [AngelsShare.MaturationMath]::CalculateClimatePeriod(
     $baselineCask
 )
 
-Assert-Close $temperatePeriod.HumidityModifier 1.025 0.000001 `
+Assert-Close $temperatePeriod.HumidityModifier 1.0 0.000001 `
     "Temperate humidity modifier changed unexpectedly."
-Assert-Close $temperatePeriod.EffectiveMaturationHours 24.6 0.000001 `
+Assert-Close $temperatePeriod.EffectiveMaturationHours 24.0 0.000001 `
     "Temperate effective maturation changed unexpectedly."
 $constantClimateResult = [AngelsShare.MaturationMath]::CalculateConstantClimate(
     "angels-share:whitespiritportion-rye",
@@ -370,9 +451,9 @@ $constantClimateResult = [AngelsShare.MaturationMath]::CalculateConstantClimate(
     $baselineCask,
     $null
 )
-Assert-Close $constantClimateResult.Snapshot.AgeHours 24.6 0.000001 `
+Assert-Close $constantClimateResult.Snapshot.AgeHours 24.0 0.000001 `
     "Constant-climate convenience calculation lost effective maturation."
-Assert-Close $constantClimateResult.Snapshot.AgeDays 1.025 0.000001 `
+Assert-Close $constantClimateResult.Snapshot.AgeDays 1.0 0.000001 `
     "Constant-climate convenience calculation converted hours to days incorrectly."
 Assert-True (
     $hotDryPeriod.EffectiveMaturationHours -gt $temperatePeriod.EffectiveMaturationHours
@@ -380,6 +461,51 @@ Assert-True (
 Assert-True (
     $coolHumidPeriod.EffectiveMaturationHours -lt $temperatePeriod.EffectiveMaturationHours
 ) "Cool, humid climate did not mature slower than temperate climate."
+Assert-Close $hotDryPeriod.TargetCalendarDaysToPeak 6.2 0.000001 `
+    "Hot, dry baseline calendar target moved away from roughly six days."
+Assert-Close $coolHumidPeriod.TargetCalendarDaysToPeak 29.7 0.000001 `
+    "Cool, humid baseline calendar target moved away from roughly thirty days."
+
+$hotDryAtPeak = [AngelsShare.MaturationMath]::CalculateConstantClimate(
+    "angels-share:whitespiritportion-corn",
+    $hotDryPeriod.TargetCalendarDaysToPeak * 24.0,
+    30.0,
+    0.2,
+    $baselineCask,
+    $null
+)
+$coolHumidAtPeak = [AngelsShare.MaturationMath]::CalculateConstantClimate(
+    "angels-share:whitespiritportion-rye",
+    $coolHumidPeriod.TargetCalendarDaysToPeak * 24.0,
+    12.0,
+    0.75,
+    $baselineCask,
+    $null
+)
+Assert-Close $hotDryAtPeak.Snapshot.MaturityRatio 1.0 0.000001 `
+    "Hot, dry baseline no longer peaks at its calendar-time target."
+Assert-Close $coolHumidAtPeak.Snapshot.MaturityRatio 1.0 0.000001 `
+    "Cool, humid baseline no longer peaks at its calendar-time target."
+
+$slowLuckyCask = [AngelsShare.MaturationMath]::CreateBaselineCaskProfile()
+$slowLuckyCask.CaskVariance = 0.92
+$slowLuckyCask.SafeWindowMultiplier = 1.35
+$slowLuckyPeakDays = `
+    $hotDryPeriod.TargetCalendarDaysToPeak `
+    * $slowLuckyCask.SafeWindowMultiplier `
+    / $slowLuckyCask.CaskVariance
+$slowLuckyAtPeak = [AngelsShare.MaturationMath]::CalculateConstantClimate(
+    "angels-share:whitespiritportion-rye",
+    $slowLuckyPeakDays * 24.0,
+    30.0,
+    0.2,
+    $slowLuckyCask,
+    $null
+)
+Assert-True ($slowLuckyPeakDays -gt $hotDryPeriod.TargetCalendarDaysToPeak) `
+    "Cask luck no longer varies the baseline calendar-time estimate."
+Assert-Close $slowLuckyAtPeak.Snapshot.MaturityRatio 1.0 0.000001 `
+    "Cask rate and safe-window luck no longer compose into calendar peak timing."
 Assert-Close (
     [AngelsShare.MaturationMath]::ConvertCalendarHoursToDays(240.0)
 ) 10.0 0.000001 "Calendar-hour conversion regressed to the old 24x climate bug."
@@ -404,7 +530,9 @@ Assert-Close $mixedClimateResult.Snapshot.AverageTemperature 20.0 0.000001 `
     "Multi-period climate timeline averaged temperature incorrectly."
 Assert-Close $mixedClimateResult.Snapshot.AverageRainfall 0.5 0.000001 `
     "Multi-period climate timeline averaged rainfall incorrectly."
-Assert-Close $mixedClimateResult.Snapshot.AverageHumidityModifier 1.025 0.000001 `
+Assert-Close $mixedClimateResult.Snapshot.AverageHumidityModifier (
+    ($hotDryPeriod.HumidityModifier + $coldWetPeriod.HumidityModifier) / 2.0
+) 0.000001 `
     "Multi-period climate timeline averaged humidity incorrectly."
 Assert-Close $mixedClimateResult.Snapshot.AgeHours (
     $hotDryPeriod.EffectiveMaturationHours * 5.0 +
@@ -548,12 +676,11 @@ $calculationCases = @(
     [pscustomobject]@{
         Name = "Hot-dry near-peak standard cask"
         LiquidCode = "angels-share:whitespiritportion-corn"
-        ActualHours = 144.0
-        EffectiveHours = 6.2 * 0.95 * 24.0
+        ActualHours = 6.2 * 0.95 * 24.0
         Temperature = 30.0
         Rainfall = 0.2
         Cask = $baselineCask
-        ExpectedSafeWindow = 6.2
+        ExpectedSafeWindow = 18.0
         ExpectedMaturity = 0.95
         ExpectedQuality = 100.0
         ExpectedIntensity = 100.0
@@ -565,12 +692,11 @@ $calculationCases = @(
     [pscustomobject]@{
         Name = "Cool-humid near-peak standard cask"
         LiquidCode = "angels-share:whitespiritportion-rye"
-        ActualHours = 712.8
-        EffectiveHours = 29.7 * 0.95 * 24.0
+        ActualHours = 29.7 * 0.95 * 24.0
         Temperature = 12.0
         Rainfall = 0.75
         Cask = $baselineCask
-        ExpectedSafeWindow = 29.7
+        ExpectedSafeWindow = 18.0
         ExpectedMaturity = 0.95
         ExpectedQuality = 100.0
         ExpectedIntensity = 33.75
@@ -582,13 +708,14 @@ $calculationCases = @(
 )
 
 foreach ($case in $calculationCases) {
-    $calculation = Invoke-MaturationScenario `
-        $case.LiquidCode `
-        $case.ActualHours `
-        $case.EffectiveHours `
-        $case.Temperature `
-        $case.Rainfall `
-        $case.Cask
+    $calculation = [AngelsShare.MaturationMath]::CalculateConstantClimate(
+        $case.LiquidCode,
+        $case.ActualHours,
+        $case.Temperature,
+        $case.Rainfall,
+        $case.Cask,
+        $null
+    )
     $snapshot = $calculation.Snapshot
 
     Assert-Close $snapshot.SafeWindowDays $case.ExpectedSafeWindow 0.000001 `
@@ -613,23 +740,25 @@ foreach ($case in $calculationCases) {
         "$($case.Name): structured designation set changed."
 }
 
-$hotDryResult = Invoke-MaturationScenario `
-    "angels-share:whitespiritportion-corn" `
-    144.0 `
-    (6.2 * 0.95 * 24.0) `
-    30.0 `
-    0.2 `
-    $baselineCask
+$hotDryResult = [AngelsShare.MaturationMath]::CalculateConstantClimate(
+    "angels-share:whitespiritportion-corn",
+    6.2 * 0.95 * 24.0,
+    30.0,
+    0.2,
+    $baselineCask,
+    $null
+)
 Assert-Designation $hotDryResult.Snapshot "angels-share:cask-strength" 155.0 `
     "Cask-strength proof designation changed."
 
-$coolHumidResult = Invoke-MaturationScenario `
-    "angels-share:whitespiritportion-rye" `
-    712.8 `
-    (29.7 * 0.95 * 24.0) `
-    12.0 `
-    0.75 `
-    $baselineCask
+$coolHumidResult = [AngelsShare.MaturationMath]::CalculateConstantClimate(
+    "angels-share:whitespiritportion-rye",
+    29.7 * 0.95 * 24.0,
+    12.0,
+    0.75,
+    $baselineCask,
+    $null
+)
 Assert-Designation $coolHumidResult.Snapshot "angels-share:age-stated" 16.0 `
     "Age-stated year designation changed."
 

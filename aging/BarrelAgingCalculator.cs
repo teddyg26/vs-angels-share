@@ -130,11 +130,36 @@ namespace AngelsShare
             );
         }
 
-        public static void FinalizeAgingOnUnseal(BlockEntityBarrel barrel, ItemSlot liquidSlot, ItemStack liquidStack)
+        public static bool TryFinalizeAgingOnUnseal(
+            BlockEntityBarrel barrel,
+            ItemSlot liquidSlot,
+            out string failureReason
+        )
         {
-            if (barrel?.Api == null || liquidSlot?.Itemstack == null || liquidStack == null) return;
+            failureReason = null;
+
+            if (barrel?.Api == null || liquidSlot?.Itemstack == null)
+            {
+                failureReason = "The barrel contents could not be inspected.";
+                return false;
+            }
 
             ICoreAPI api = barrel.Api;
+            ItemStack liquidStack = liquidSlot.Itemstack;
+
+            if (
+                !BarrelAgingUtil.TryResolveAgedOutput(
+                    api,
+                    liquidStack,
+                    out AssetLocation outputLocation,
+                    out Item outputItem,
+                    out int outputStackSize,
+                    out failureReason
+                )
+            )
+            {
+                return false;
+            }
 
             if (
                 !MaturationRecordCodec.TryRead(liquidStack, out MaturationRecord record) ||
@@ -150,7 +175,12 @@ namespace AngelsShare
                 InitializeAgingOnSeal(barrel, liquidSlot, liquidStack);
 
                 if (!MaturationRecordCodec.TryRead(liquidStack, out record) || record.ActiveSession == null)
-                    return;
+                {
+                    failureReason = MaturationRecordCodec.HasStoredRecord(liquidStack)
+                        ? "The maturation record uses an unsupported schema version."
+                        : "An active maturation session could not be recovered.";
+                    return false;
+                }
             }
 
             double nowTotalHours = api.World.Calendar.ElapsedHours;
@@ -165,10 +195,7 @@ namespace AngelsShare
             AgingSnapshot result = calculation.Snapshot;
             session.ProjectedOutcome = MaturationRecordCodec.CreateOutcome(result);
 
-            AssetLocation outputLocation;
-            string outputCode = BarrelAgingUtil.TryGetAgedOutputCode(liquidStack, out outputLocation)
-                ? outputLocation.ToString()
-                : liquidStack.Collectible.Code.ToString();
+            string outputCode = outputLocation.ToString();
 
             CompletedMaturationSession completed = new CompletedMaturationSession
             {
@@ -197,13 +224,73 @@ namespace AngelsShare
             );
             record.ActiveSession = null;
             record.State = MaturationRecordState.Finalized;
-            MaturationRecordCodec.Write(liquidStack, record);
+
+            ItemStack finalizedStack = new ItemStack(outputItem, outputStackSize);
+            if (liquidStack.Attributes != null)
+            {
+                finalizedStack.Attributes = liquidStack.Attributes.Clone();
+            }
+
+            MaturationRecordCodec.Write(finalizedStack, record);
+
+            if (
+                !MaturationRecordCodec.TryRead(finalizedStack, out MaturationRecord verifiedRecord) ||
+                verifiedRecord.State != MaturationRecordState.Finalized ||
+                verifiedRecord.ActiveSession != null ||
+                verifiedRecord.FinalizedProduct == null ||
+                verifiedRecord.CompletedSessions.Count != record.CompletedSessions.Count
+            )
+            {
+                failureReason = "The finalized maturation record could not be verified.";
+                return false;
+            }
+
+            double priorSealedSinceTotalHours = barrel.SealedSinceTotalHours;
+
+            try
+            {
+                // These assignments are the transaction boundary. Until this point the
+                // sealed barrel still contains its original stack and active session.
+                liquidSlot.Itemstack = finalizedStack;
+                barrel.Sealed = false;
+                barrel.SealedSinceTotalHours = 0.0;
+
+                liquidSlot.MarkDirty();
+                barrel.MarkDirty(true);
+                api.World.BlockAccessor.MarkBlockEntityDirty(barrel.Pos);
+            }
+            catch (Exception exception)
+            {
+                liquidSlot.Itemstack = liquidStack;
+                barrel.Sealed = true;
+                barrel.SealedSinceTotalHours = priorSealedSinceTotalHours;
+
+                try
+                {
+                    liquidSlot.MarkDirty();
+                    barrel.MarkDirty(true);
+                    api.World.BlockAccessor.MarkBlockEntityDirty(barrel.Pos);
+                }
+                catch (Exception rollbackException)
+                {
+                    api.Logger.Error(
+                        "[Angel's Share] Failed to synchronize an unseal rollback at {0}: {1}",
+                        barrel.Pos,
+                        rollbackException
+                    );
+                }
+
+                api.Logger.Error(
+                    "[Angel's Share] Rolled back failed unseal transaction for {0} at {1}: {2}",
+                    liquidStack.Collectible?.Code,
+                    barrel.Pos,
+                    exception
+                );
+                failureReason = "The finalized liquid could not be committed to the barrel.";
+                return false;
+            }
 
             InvalidateProjectedAging(barrel);
-
-            liquidSlot.MarkDirty();
-            barrel.MarkDirty(true);
-            api.World.BlockAccessor.MarkBlockEntityDirty(barrel.Pos);
 
             double elapsedCalendarDays = result.TotalHours / 24.0;
 
@@ -235,6 +322,8 @@ namespace AngelsShare
                 result.Tier,
                 result.SpecialStyle
             );
+
+            return true;
         }
 
         public static AgingSnapshot GetProjectedAging(BlockEntityBarrel barrel, ItemStack liquidStack)

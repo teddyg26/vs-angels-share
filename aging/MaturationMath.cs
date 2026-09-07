@@ -56,6 +56,7 @@ namespace AngelsShare
         public double DurationHours { get; set; }
         public double Temperature { get; set; }
         public double Rainfall { get; set; }
+        public double TargetCalendarDaysToPeak { get; set; }
         public double TemperatureSpeedMultiplier { get; set; }
         public double HumidityModifier { get; set; }
         public double MaturationRateMultiplier { get; set; }
@@ -84,6 +85,8 @@ namespace AngelsShare
     /// </summary>
     public static class MaturationMath
     {
+        private const double BaselineEffectivePeakDays = 18.0;
+
         private sealed class CaskTraitRule
         {
             public double UpperRoll { get; set; }
@@ -258,14 +261,23 @@ namespace AngelsShare
             CaskProfile profile = NormalizeCask(cask);
             double humidityModifier = GetHumidityModifier(rainfall);
             double temperatureSpeedMultiplier = GetTemperatureSpeedMultiplier(temperature);
-            double maturationRate =
-                temperatureSpeedMultiplier * humidityModifier * profile.CaskVariance;
+            double targetCalendarDaysToPeak = GetTargetCalendarDaysToPeak(
+                temperature,
+                rainfall
+            );
+            // Climate defines how many calendar days a baseline cask needs to
+            // accumulate the neutral effective peak. The effective safe window
+            // below must not apply the same climate adjustment a second time.
+            double climateMaturationRate =
+                BaselineEffectivePeakDays / targetCalendarDaysToPeak;
+            double maturationRate = climateMaturationRate * profile.CaskVariance;
 
             return new MaturationClimatePeriodResult
             {
                 DurationHours = durationHours,
                 Temperature = temperature,
                 Rainfall = rainfall,
+                TargetCalendarDaysToPeak = targetCalendarDaysToPeak,
                 TemperatureSpeedMultiplier = temperatureSpeedMultiplier,
                 HumidityModifier = humidityModifier,
                 MaturationRateMultiplier = maturationRate,
@@ -329,6 +341,12 @@ namespace AngelsShare
                 profile
             );
             double maturityRatio = safeWindowDays > 0.0 ? ageDays / safeWindowDays : 0.0;
+            double averageMaturationRate = input.TotalActualElapsedHours > 0.0
+                ? input.TotalEffectiveMaturationHours / input.TotalActualElapsedHours
+                : 1.0;
+            double estimatedCalendarDaysToPeak = averageMaturationRate > 0.0
+                ? safeWindowDays / averageMaturationRate
+                : safeWindowDays;
             double overAgeRatio = Math.Max(0.0, maturityRatio - 1.0);
             double intensity = CalculateIntensity(
                 input.AverageTemperature,
@@ -362,7 +380,7 @@ namespace AngelsShare
             double proof = CalculateProofFromIntensity(intensity);
             double ageStatementYears = CalculateAgeStatementYears(
                 ageDays,
-                safeWindowDays,
+                estimatedCalendarDaysToPeak,
                 maturityRatio,
                 smoothness,
                 input.AverageTemperature,
@@ -374,7 +392,7 @@ namespace AngelsShare
                 intensity,
                 smoothness,
                 maturityRatio,
-                safeWindowDays,
+                estimatedCalendarDaysToPeak,
                 ageDays,
                 input.AverageTemperature,
                 input.AverageRainfall,
@@ -462,14 +480,14 @@ namespace AngelsShare
 
         public static double GetTemperatureSpeedMultiplier(double temperature)
         {
-            double raw = Math.Pow(1.012, temperature - 20.0);
-            return Clamp(raw, 1.00, 1.80);
+            return BaselineEffectivePeakDays
+                / GetTargetCalendarDaysToPeak(temperature, 0.5);
         }
 
         public static double GetHumidityModifier(double rainfall)
         {
-            double clampedRainfall = Clamp(rainfall, 0.0, 1.0);
-            return 1.15 - (clampedRainfall * 0.25);
+            return BaselineEffectivePeakDays
+                / GetTargetCalendarDaysToPeak(20.0, rainfall);
         }
 
         public static double GetDrynessRiskModifier(double rainfall)
@@ -485,28 +503,44 @@ namespace AngelsShare
         )
         {
             CaskProfile profile = NormalizeCask(cask);
-            double safeWindowDays = 18.0;
+            // This is an effective-maturation window. Climate has already been
+            // integrated into effective hours; only cask character belongs here.
+            return Clamp(
+                BaselineEffectivePeakDays * profile.SafeWindowMultiplier,
+                6.0,
+                42.0
+            );
+        }
+
+        public static double GetTargetCalendarDaysToPeak(
+            double averageTemperature,
+            double averageRainfall
+        )
+        {
+            // Singleplayer balance target for a baseline cask. Representative
+            // hot/dry and cool/humid climates land near 6 and 30 calendar days;
+            // more extreme climates and cask luck may legitimately exceed them.
+            double targetCalendarDays = BaselineEffectivePeakDays;
 
             if (averageTemperature > 20.0)
             {
-                safeWindowDays -= (averageTemperature - 20.0) * 0.70;
+                targetCalendarDays -= (averageTemperature - 20.0) * 0.70;
             }
             else if (averageTemperature < 20.0)
             {
-                safeWindowDays += (20.0 - averageTemperature) * 0.65;
+                targetCalendarDays += (20.0 - averageTemperature) * 0.65;
             }
 
             if (averageRainfall > 0.65)
             {
-                safeWindowDays += 4.0 + ((averageRainfall - 0.5) * 10.0);
+                targetCalendarDays += 4.0 + ((averageRainfall - 0.5) * 10.0);
             }
             else if (averageRainfall < 0.30)
             {
-                safeWindowDays -= 4.0 + ((0.30 - averageRainfall) * 8.0);
+                targetCalendarDays -= 4.0 + ((0.30 - averageRainfall) * 8.0);
             }
 
-            safeWindowDays *= profile.SafeWindowMultiplier;
-            return Clamp(safeWindowDays, 6.0, 42.0);
+            return Clamp(targetCalendarDays, 6.0, 42.0);
         }
 
         public static double CalculateIntensity(
@@ -664,7 +698,7 @@ namespace AngelsShare
             double intensity,
             double smoothness,
             double maturityRatio,
-            double safeWindowDays,
+            double estimatedCalendarDaysToPeak,
             double ageDays,
             double averageTemperature,
             double averageRainfall,
@@ -678,7 +712,7 @@ namespace AngelsShare
             bool tightGrainTrait = profile.Trait == "tight-grain";
             double ageStatementYears = CalculateAgeStatementYears(
                 ageDays,
-                safeWindowDays,
+                estimatedCalendarDaysToPeak,
                 maturityRatio,
                 smoothness,
                 averageTemperature,
@@ -703,7 +737,11 @@ namespace AngelsShare
                 && quality >= 94.0
                 && smoothness >= 82.0
                 && ageStatementYears >= 14.0
-                && (unicornTrait || tightGrainTrait || safeWindowDays >= 32.0);
+                && (
+                    unicornTrait
+                    || tightGrainTrait
+                    || estimatedCalendarDaysToPeak >= 32.0
+                );
             bool unicornCaskStrengthCandidate =
                 caskStrengthCandidate
                 && quality >= 94.0
@@ -745,17 +783,25 @@ namespace AngelsShare
 
         public static double CalculateAgeStatementYears(
             double ageDays,
-            double safeWindowDays,
+            double estimatedCalendarDaysToPeak,
             double maturityRatio,
             double smoothness,
             double averageTemperature,
             double averageRainfall
         )
         {
-            if (safeWindowDays < 18.0 || maturityRatio < 0.88 || smoothness < 65.0)
+            if (
+                estimatedCalendarDaysToPeak < 18.0
+                || maturityRatio < 0.88
+                || smoothness < 65.0
+            )
                 return 0.0;
 
-            double slowWindowScore = Clamp((safeWindowDays - 18.0) / 24.0, 0.0, 1.0);
+            double slowWindowScore = Clamp(
+                (estimatedCalendarDaysToPeak - 18.0) / 24.0,
+                0.0,
+                1.0
+            );
             double smoothnessScore = Clamp((smoothness - 65.0) / 35.0, 0.0, 1.0);
             double maturityScore = Clamp((maturityRatio - 0.88) / 0.17, 0.0, 1.0);
             double coldBonus = Clamp((16.0 - averageTemperature) / 18.0, 0.0, 1.0);
